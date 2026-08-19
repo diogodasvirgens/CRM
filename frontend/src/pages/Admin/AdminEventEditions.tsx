@@ -11,6 +11,7 @@ import {
 import { apiErrorMessage } from "../../api/client";
 import { useToastStore } from "../../state/toast";
 import { EventEdition } from "../../types";
+import { formatDateOnly } from "../../utils/date";
 
 const emptyForm = { name: "", date: "", location: "", ticketPrice: "" };
 
@@ -148,7 +149,7 @@ export function AdminEventEditions() {
           {editionsQuery.data?.map((edition) => (
             <tr key={edition.id}>
               <td>{edition.name}</td>
-              <td>{edition.date ? new Date(edition.date).toLocaleDateString("pt-BR") : "-"}</td>
+              <td>{formatDateOnly(edition.date)}</td>
               <td>{edition.location ?? "-"}</td>
               <td>{edition.ticketPrice !== null ? `R$ ${edition.ticketPrice}` : "-"}</td>
               <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
