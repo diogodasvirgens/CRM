@@ -19,6 +19,11 @@ export function Layout() {
             <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : "")}>
               Funil
             </NavLink>
+            {user.role !== "FINANCEIRO" && (
+              <NavLink to="/conversas" className={({ isActive }) => (isActive ? "active" : "")}>
+                Conversas
+              </NavLink>
+            )}
             {user.role === "GESTOR" && (
               <NavLink to="/admin/usuarios" className={({ isActive }) => (isActive ? "active" : "")}>
                 Administração

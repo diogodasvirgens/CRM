@@ -27,3 +27,8 @@ export function canSetOwner(user: AuthUser, newOwnerId: string | null): boolean 
 export function assertRole(user: AuthUser, ...roles: Role[]): boolean {
   return roles.includes(user.role);
 }
+
+/** Financeiro não conversa pelo WhatsApp: sem acesso à caixa de entrada. */
+export function canAccessInbox(user: AuthUser): boolean {
+  return user.role !== "FINANCEIRO";
+}

@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -18,6 +18,7 @@ datasource db {
 // BusinessLine: SHOW | EVENTO
 // LeadOrigin: INDICACAO | REDES_SOCIAIS | RECORRENCIA | TRAFEGO_PAGO | OUTRO
 // HistoryField: STAGE | OWNER
+// MessageDirection: IN | OUT
 
 model User {
   id                String   @id @default(cuid())
@@ -32,6 +33,44 @@ model User {
 
   leadsOwned        Lead[]        @relation("LeadOwner")
   historyChanges    LeadHistory[] @relation("HistoryChangedBy")
+  messagesSent      Message[]     @relation("MessageSender")
+}
+
+// Um contato do WhatsApp. Existe independente de lead (toda mensagem cria/usa
+// um Contact) e pode virar lead mais de uma vez ao longo do tempo — por isso
+// a ligação com Lead é 1-para-muitos, e `currentLeadId` aponta pro lead atual
+// (o que recebe as mensagens novas enquanto a conversa não for outro lead).
+model Contact {
+  id            String    @id @default(cuid())
+  phone         String    @unique
+  name          String?
+  archivedAt    DateTime?
+  lastMessageAt DateTime?
+  lastReadAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  leads         Lead[]    @relation("ContactLeads")
+  currentLeadId String?   @unique
+  currentLead   Lead?     @relation("ContactCurrentLead", fields: [currentLeadId], references: [id], onDelete: SetNull)
+  messages      Message[]
+}
+
+model Message {
+  id                String   @id @default(cuid())
+  contactId         String
+  contact           Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  leadId            String?
+  lead              Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  content           String
+  direction         String
+  senderId          String?
+  sender            User?    @relation("MessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+  whatsappMessageId String?  @unique
+  createdAt         DateTime @default(now())
+
+  @@index([contactId])
+  @@index([leadId])
 }
 
 model Stage {
@@ -70,12 +109,16 @@ model Tag {
 model Lead {
   id             String       @id @default(cuid())
   contactName    String
-  phone          String
+  contactId      String
+  contact        Contact      @relation("ContactLeads", fields: [contactId], references: [id])
+  currentForContact Contact?  @relation("ContactCurrentLead")
   businessLine   String
   stageId        String
   stage          Stage        @relation(fields: [stageId], references: [id])
   estimatedValue Float?
   eventDate      DateTime?
+  eventType      String?
+  location       String?
   ownerId        String?
   owner          User?        @relation("LeadOwner", fields: [ownerId], references: [id])
   origin         String
@@ -88,10 +131,12 @@ model Lead {
 
   tags           LeadTag[]
   history        LeadHistory[]
+  messages       Message[]
 
   @@index([businessLine])
   @@index([stageId])
   @@index([ownerId])
+  @@index([contactId])
 }
 
 model LeadTag {

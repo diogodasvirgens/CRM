@@ -1,5 +1,5 @@
 import { api } from "./client";
-import { BusinessLine, EventEdition, Lead, Stage, Tag, User } from "../types";
+import { BusinessLine, Contact, Conversation, EventEdition, Lead, Message, Stage, Tag, User, WhatsappState } from "../types";
 
 // Auth
 export const loginRequest = (email: string, password: string) =>
@@ -87,3 +87,28 @@ export const updateUser = (id: string, payload: Partial<{ name: string; email: s
 
 export const resetUserPassword = (id: string) =>
   api.post<{ provisionalPassword: string }>(`/users/${id}/reset-password`).then((r) => r.data);
+
+// WhatsApp connection (Gestor)
+export const fetchWhatsappStatus = () => api.get<WhatsappState>("/whatsapp/status").then((r) => r.data);
+
+export const logoutWhatsapp = () => api.post("/whatsapp/logout");
+
+// Caixa de entrada
+export const fetchConversations = (params: { archived?: boolean } = {}) =>
+  api
+    .get<{ conversations: Conversation[] }>("/conversations", { params })
+    .then((r) => r.data.conversations);
+
+export const fetchConversationMessages = (contactId: string) =>
+  api
+    .get<{ contact: Contact; messages: Message[] }>(`/conversations/${contactId}/messages`)
+    .then((r) => r.data);
+
+export const sendConversationMessage = (contactId: string, text: string) =>
+  api.post<{ message: Message }>(`/conversations/${contactId}/messages`, { text }).then((r) => r.data.message);
+
+export const archiveConversation = (contactId: string) =>
+  api.post<{ contact: Contact }>(`/conversations/${contactId}/archive`).then((r) => r.data.contact);
+
+export const createLeadFromConversation = (contactId: string, businessLine: BusinessLine) =>
+  api.post<{ lead: Lead }>(`/conversations/${contactId}/lead`, { businessLine }).then((r) => r.data.lead);

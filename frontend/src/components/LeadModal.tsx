@@ -14,6 +14,7 @@ import { apiErrorMessage } from "../api/client";
 import { useAuthStore } from "../state/auth";
 import { useToastStore } from "../state/toast";
 import { BusinessLine, LeadOrigin, ORIGIN_LABELS, Stage } from "../types";
+import { formatDateOnly } from "../utils/date";
 
 interface LeadModalProps {
   businessLine: BusinessLine;
@@ -29,6 +30,8 @@ const emptyForm = {
   phone: "",
   estimatedValue: "",
   eventDate: "",
+  eventType: "",
+  location: "",
   origin: "INDICACAO" as LeadOrigin,
   originDetail: "",
   notes: "",
@@ -64,9 +67,11 @@ export function LeadModal({ businessLine, stages, leadId, defaultStageId, onClos
     if (isEditing && lead) {
       setForm({
         contactName: lead.contactName,
-        phone: lead.phone,
+        phone: lead.contact.phone,
         estimatedValue: lead.estimatedValue?.toString() ?? "",
         eventDate: lead.eventDate ? lead.eventDate.slice(0, 10) : "",
+        eventType: lead.eventType ?? "",
+        location: lead.location ?? "",
         origin: lead.origin,
         originDetail: lead.originDetail ?? "",
         notes: lead.notes ?? "",
@@ -129,6 +134,8 @@ export function LeadModal({ businessLine, stages, leadId, defaultStageId, onClos
       phone: form.phone,
       estimatedValue: form.estimatedValue ? Number(form.estimatedValue) : null,
       eventDate: form.eventDate ? new Date(form.eventDate).toISOString() : null,
+      eventType: form.eventType || null,
+      location: form.location || null,
       origin: form.origin,
       originDetail: form.origin === "OUTRO" ? form.originDetail : null,
       notes: form.notes || null,
@@ -228,6 +235,27 @@ export function LeadModal({ businessLine, stages, leadId, defaultStageId, onClos
                   value={form.eventDate}
                   disabled={disabled}
                   onChange={(e) => updateField("eventDate", e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-field">
+                <label>Tipo do evento</label>
+                <input
+                  placeholder="Ex.: Casamento, Aniversário, Formatura"
+                  value={form.eventType}
+                  disabled={disabled}
+                  onChange={(e) => updateField("eventType", e.target.value)}
+                />
+              </div>
+              <div className="form-field">
+                <label>Local</label>
+                <input
+                  placeholder="Ex.: Salão Vitória, Salvador - BA"
+                  value={form.location}
+                  disabled={disabled}
+                  onChange={(e) => updateField("location", e.target.value)}
                 />
               </div>
             </div>
@@ -371,6 +399,23 @@ export function LeadModal({ businessLine, stages, leadId, defaultStageId, onClos
                 Fechar
               </button>
             </div>
+
+            {isEditing && lead?.contact.messages && lead.contact.messages.length > 0 && (
+              <div className="form-field">
+                <label>Conversa no WhatsApp</label>
+                <div className="inbox-messages" style={{ maxHeight: 260, border: "1px solid var(--border)", borderRadius: 6 }}>
+                  {lead.contact.messages.map((m) => (
+                    <div key={m.id} className={`message-bubble ${m.direction === "OUT" ? "out" : "in"}`}>
+                      <div>{m.content}</div>
+                      <div className="message-meta">
+                        {m.direction === "OUT" && m.sender ? `${m.sender.name} · ` : ""}
+                        {formatDateOnly(m.createdAt)} {new Date(m.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {isEditing && lead?.history && lead.history.length > 0 && (
               <div className="history-list">

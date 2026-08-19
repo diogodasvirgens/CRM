@@ -72,7 +72,7 @@ eventEditionsRouter.get("/:id/guests", async (req, res) => {
 
   const leads = await prisma.lead.findMany({
     where: { eventEditionId: req.params.id },
-    include: { stage: true },
+    include: { stage: true, contact: true },
     orderBy: { contactName: "asc" },
   });
 
@@ -81,7 +81,7 @@ eventEditionsRouter.get("/:id/guests", async (req, res) => {
     guests: leads.map((lead) => ({
       id: lead.id,
       name: lead.contactName,
-      phone: lead.phone,
+      phone: lead.contact.phone,
       stage: lead.stage.name,
     })),
   });
@@ -93,7 +93,7 @@ eventEditionsRouter.get("/:id/guests/export", async (req, res) => {
 
   const leads = await prisma.lead.findMany({
     where: { eventEditionId: req.params.id },
-    include: { stage: true },
+    include: { stage: true, contact: true },
     orderBy: { contactName: "asc" },
   });
 
@@ -101,7 +101,7 @@ eventEditionsRouter.get("/:id/guests/export", async (req, res) => {
 
   const rows = [
     ["Nome", "Telefone", "Etapa"].map(escapeCsv).join(","),
-    ...leads.map((lead) => [lead.contactName, lead.phone, lead.stage.name].map(escapeCsv).join(",")),
+    ...leads.map((lead) => [lead.contactName, lead.contact.phone, lead.stage.name].map(escapeCsv).join(",")),
   ];
 
   const filename = `convidados-${edition.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`;

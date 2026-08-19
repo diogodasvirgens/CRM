@@ -10,6 +10,8 @@ import { AdminUsers } from "./pages/Admin/AdminUsers";
 import { AdminStages } from "./pages/Admin/AdminStages";
 import { AdminTags } from "./pages/Admin/AdminTags";
 import { AdminEventEditions } from "./pages/Admin/AdminEventEditions";
+import { AdminWhatsapp } from "./pages/Admin/AdminWhatsapp";
+import { Inbox } from "./pages/Inbox";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { token, user } = useAuthStore();
@@ -20,6 +22,12 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 function RequireGestor({ children }: { children: JSX.Element }) {
   const { user } = useAuthStore();
   if (user?.role !== "GESTOR") return <Navigate to="/" replace />;
+  return children;
+}
+
+function RequireInboxAccess({ children }: { children: JSX.Element }) {
+  const { user } = useAuthStore();
+  if (user?.role === "FINANCEIRO") return <Navigate to="/" replace />;
   return children;
 }
 
@@ -43,6 +51,7 @@ export default function App() {
         }
       >
         <Route path="/" element={<Kanban />} />
+        <Route path="/conversas" element={<RequireInboxAccess><Inbox /></RequireInboxAccess>} />
         <Route path="/trocar-senha" element={<ChangePassword />} />
         <Route
           path="/admin"
@@ -57,6 +66,7 @@ export default function App() {
           <Route path="etapas" element={<AdminStages />} />
           <Route path="etiquetas" element={<AdminTags />} />
           <Route path="edicoes" element={<AdminEventEditions />} />
+          <Route path="whatsapp" element={<AdminWhatsapp />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

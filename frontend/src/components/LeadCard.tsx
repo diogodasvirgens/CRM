@@ -1,5 +1,6 @@
 import { Draggable } from "@hello-pangea/dnd";
 import { Lead } from "../types";
+import { formatDateOnly } from "../utils/date";
 
 interface LeadCardProps {
   lead: Lead;
@@ -26,9 +27,31 @@ export function LeadCard({ lead, index, canDrag, onClick }: LeadCardProps) {
           onClick={onClick}
         >
           <div className="lead-card-name">{lead.contactName}</div>
-          <div className="lead-card-meta">{lead.phone}</div>
+          <div className="lead-card-meta">{lead.contact.phone}</div>
           {lead.estimatedValue !== null && (
             <div className="lead-card-value">{formatCurrency(lead.estimatedValue)}</div>
+          )}
+          {(lead.eventType || lead.eventDate || lead.location) && (
+            <div className="lead-card-event">
+              {lead.eventType && (
+                <span>
+                  <span className="lead-card-event-icon">🎉</span>
+                  {lead.eventType}
+                </span>
+              )}
+              {lead.eventDate && (
+                <span>
+                  <span className="lead-card-event-icon">📅</span>
+                  {formatDateOnly(lead.eventDate)}
+                </span>
+              )}
+              {lead.location && (
+                <span>
+                  <span className="lead-card-event-icon">📍</span>
+                  {lead.location}
+                </span>
+              )}
+            </div>
           )}
           {lead.tags.length > 0 && (
             <div className="lead-card-tags">

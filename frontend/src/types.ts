@@ -54,15 +54,62 @@ export interface LeadHistoryEntry {
   changedBy: { id: string; name: string };
 }
 
+export type MessageDirection = "IN" | "OUT";
+
+export interface Message {
+  id: string;
+  contactId: string;
+  leadId: string | null;
+  content: string;
+  direction: MessageDirection;
+  senderId: string | null;
+  sender: { id: string; name: string } | null;
+  createdAt: string;
+}
+
+export interface Contact {
+  id: string;
+  phone: string;
+  name: string | null;
+  archivedAt: string | null;
+  lastMessageAt: string | null;
+  lastReadAt: string | null;
+  messages?: Message[];
+}
+
+export interface Conversation {
+  id: string;
+  phone: string;
+  name: string | null;
+  archivedAt: string | null;
+  lastMessageAt: string | null;
+  unread: boolean;
+  lastMessage: { content: string; direction: MessageDirection; createdAt: string } | null;
+  currentLead: { id: string; contactName: string; businessLine: BusinessLine; stage: { name: string } } | null;
+}
+
+export type WhatsappConnectionStatus = "disconnected" | "connecting" | "qr" | "connected" | "logged_out";
+
+export interface WhatsappState {
+  status: WhatsappConnectionStatus;
+  qr: string | null;
+  phone: string | null;
+  lastError: string | null;
+  updatedAt: string;
+}
+
 export interface Lead {
   id: string;
   contactName: string;
-  phone: string;
+  contactId: string;
+  contact: Contact;
   businessLine: BusinessLine;
   stageId: string;
   stage: Stage;
   estimatedValue: number | null;
   eventDate: string | null;
+  eventType: string | null;
+  location: string | null;
   ownerId: string | null;
   owner: { id: string; name: string } | null;
   origin: LeadOrigin;

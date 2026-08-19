@@ -16,6 +16,9 @@ export function AdminLayout() {
         <NavLink to="/admin/edicoes" className={({ isActive }) => (isActive ? "active" : "")}>
           Edições de evento
         </NavLink>
+        <NavLink to="/admin/whatsapp" className={({ isActive }) => (isActive ? "active" : "")}>
+          WhatsApp
+        </NavLink>
       </aside>
       <div className="admin-content">
         <Outlet />

@@ -8,6 +8,8 @@ import { stagesRouter } from "./routes/stages";
 import { tagsRouter } from "./routes/tags";
 import { eventEditionsRouter } from "./routes/eventEditions";
 import { leadsRouter } from "./routes/leads";
+import { whatsappRouter } from "./routes/whatsapp";
+import { conversationsRouter } from "./routes/conversations";
 
 export const app = express();
 
@@ -22,6 +24,8 @@ app.use("/api/stages", stagesRouter);
 app.use("/api/tags", tagsRouter);
 app.use("/api/event-editions", eventEditionsRouter);
 app.use("/api/leads", leadsRouter);
+app.use("/api/whatsapp", whatsappRouter);
+app.use("/api/conversations", conversationsRouter);
 
 // Serve o frontend já compilado (frontend/dist) para que backend e frontend
 // respondam num único localhost. Rode `npm run build` no frontend antes.

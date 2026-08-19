@@ -7,8 +7,8 @@ CREATE TABLE "User" (
     "role" TEXT NOT NULL,
     "active" BOOLEAN NOT NULL DEFAULT true,
     "mustChangePassword" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL
 );
 
 -- CreateTable
@@ -17,26 +17,26 @@ CREATE TABLE "Stage" (
     "businessLine" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "order" INTEGER NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL
 );
 
 -- CreateTable
 CREATE TABLE "EventEdition" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "name" TEXT NOT NULL,
-    "date" DATETIME,
+    "date" TIMESTAMP(3),
     "location" TEXT,
-    "ticketPrice" REAL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
+    "ticketPrice" DOUBLE PRECISION,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL
 );
 
 -- CreateTable
 CREATE TABLE "Tag" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "name" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- CreateTable
@@ -46,15 +46,15 @@ CREATE TABLE "Lead" (
     "phone" TEXT NOT NULL,
     "businessLine" TEXT NOT NULL,
     "stageId" TEXT NOT NULL,
-    "estimatedValue" REAL,
-    "eventDate" DATETIME,
+    "estimatedValue" DOUBLE PRECISION,
+    "eventDate" TIMESTAMP(3),
     "ownerId" TEXT,
     "origin" TEXT NOT NULL,
     "originDetail" TEXT,
     "notes" TEXT,
     "eventEditionId" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "Lead_stageId_fkey" FOREIGN KEY ("stageId") REFERENCES "Stage" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
     CONSTRAINT "Lead_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE,
     CONSTRAINT "Lead_eventEditionId_fkey" FOREIGN KEY ("eventEditionId") REFERENCES "EventEdition" ("id") ON DELETE SET NULL ON UPDATE CASCADE
@@ -78,7 +78,7 @@ CREATE TABLE "LeadHistory" (
     "oldValue" TEXT,
     "newValue" TEXT,
     "changedById" TEXT NOT NULL,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "LeadHistory_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "Lead" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "LeadHistory_changedById_fkey" FOREIGN KEY ("changedById") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
@@ -100,3 +100,14 @@ CREATE INDEX "Lead_stageId_idx" ON "Lead"("stageId");
 
 -- CreateIndex
 CREATE INDEX "Lead_ownerId_idx" ON "Lead"("ownerId");
+
+-- Enable Row Level Security (this app is accessed only via the backend's
+-- direct Postgres connection through Prisma, never via the PostgREST
+-- anon/service API, so we lock every table down with no policies).
+ALTER TABLE "User" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Stage" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "EventEdition" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Tag" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "Lead" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "LeadTag" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "LeadHistory" ENABLE ROW LEVEL SECURITY;
