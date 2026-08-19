@@ -114,13 +114,16 @@ Tudo da Fase 1, mais:
 - Se a conversa já é de um lead existente, as mensagens aparecem direto dentro do card do lead (mesmo modal de detalhe da Fase 1) — inclusive pra quem só tem acesso de leitura (Financeiro).
 - Arquivar conversa (some da lista principal sem apagar nada — útil pra contato pessoal que não é cliente).
 - Um mesmo contato pode virar lead mais de uma vez em épocas diferentes: o modelo de dados guarda o telefone num `Contact` separado do `Lead`, e cada lead sabe a qual contato pertence.
+- Fotos, áudios (inclusive gravar e enviar direto do navegador, sem precisar do celular) e documentos: aparecem na conversa (imagem em miniatura, áudio com player, documento como botão de baixar) e dá pra enviar os três de volta pelo CRM.
+- Busca por leads e por conversas tolerante a erro de digitação e sem distinção de acento ("joao" encontra "João"), e filtro de conversas por etapa do funil (inclusive "sem lead vinculado").
+- Responsável do lead é atribuído automaticamente pra quem move um lead sem dono pra outra etapa, ou pra quem cria o lead a partir de uma conversa — sem sobrescrever um responsável que já existe.
 
 ## Decisões técnicas relevantes
 
 - **Origem do lead**: é um dos quatro valores fixos (indicação, redes sociais, recorrência, tráfego pago) ou "Outro" com texto livre, conforme pedido no escopo. Lead criado a partir de uma conversa do WhatsApp nasce com origem "Outro / Caixa de entrada do WhatsApp" por padrão — o vendedor ajusta depois se souber a origem real.
 - **Contato x Lead**: telefone mora no `Contact`, não solto no `Lead` (migrado nesta fase). Cada `Contact` tem um `currentLeadId` apontando pro lead "atual" daquela conversa — é ele que recebe as mensagens novas enquanto ninguém criar um lead novo pra esse contato.
 - **Mensagem sem lead**: mensagem nova de um contato sem lead vinculado fica só no `Contact` (`leadId` nulo) até alguém decidir criar o lead. Esse desenho já é o que a Fase 3 (agente de IA) vai usar pra fazer a triagem automática.
-- **Conteúdo de mensagens não-texto**: imagens, áudios, documentos etc. aparecem na conversa com um rótulo (ex: "[Áudio]"), sem baixar ou guardar o arquivo de mídia em si — isso fica pra uma fase futura, se for necessário.
+- **Armazenamento de mídia**: fotos, áudios e documentos ficam salvos em disco local (`backend/media-storage/`, fora do controle de versão, igual `whatsapp-session/`) — nome do arquivo é o id da `Message` dona dele. Servido só por trás de autenticação (`GET /api/media/:messageId`), nunca como arquivo estático público. Áudio gravado no navegador sai no formato que o navegador gerar (geralmente `audio/webm`); o WhatsApp recebe e toca normalmente, mas pode não aparecer com a "bolha" nativa de mensagem de voz do app oficial.
 - **Lista de convidados da edição**: hoje é composta pelos leads vinculados àquela edição (nome e telefone). Se no futuro um lead único puder representar várias pessoas na porta (por exemplo, compra de dois ingressos), vale revisar esse modelo para guardar uma lista de nomes por lead.
 - **Enums no Postgres**: papel, frente de negócio, origem, tipo de histórico e direção de mensagem são campos `String` validados na camada de aplicação (zod), não `enum` nativo do Postgres — mantém a mesma convenção usada desde a Fase 1, fácil de promover a enum de verdade depois se fizer falta.
 - **Usuário nunca é apagado, só desativado**: preserva a integridade do histórico de mudanças (que guarda quem alterou o quê).

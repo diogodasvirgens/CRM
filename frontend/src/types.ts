@@ -55,6 +55,7 @@ export interface LeadHistoryEntry {
 }
 
 export type MessageDirection = "IN" | "OUT";
+export type MessageMediaType = "image" | "audio" | "video" | "document" | "sticker";
 
 export interface Message {
   id: string;
@@ -64,6 +65,9 @@ export interface Message {
   direction: MessageDirection;
   senderId: string | null;
   sender: { id: string; name: string } | null;
+  mediaType: MessageMediaType | null;
+  mediaMimeType: string | null;
+  mediaFileName: string | null;
   createdAt: string;
 }
 

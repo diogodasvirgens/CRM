@@ -15,6 +15,7 @@ import { useAuthStore } from "../state/auth";
 import { useToastStore } from "../state/toast";
 import { BusinessLine, LeadOrigin, ORIGIN_LABELS, Stage } from "../types";
 import { formatDateOnly } from "../utils/date";
+import { MessageMedia, messageHasVisibleCaption } from "./MessageMedia";
 
 interface LeadModalProps {
   businessLine: BusinessLine;
@@ -406,7 +407,8 @@ export function LeadModal({ businessLine, stages, leadId, defaultStageId, onClos
                 <div className="inbox-messages" style={{ maxHeight: 260, border: "1px solid var(--border)", borderRadius: 6 }}>
                   {lead.contact.messages.map((m) => (
                     <div key={m.id} className={`message-bubble ${m.direction === "OUT" ? "out" : "in"}`}>
-                      <div>{m.content}</div>
+                      <MessageMedia message={m} />
+                      {messageHasVisibleCaption(m) && <div>{m.content}</div>}
                       <div className="message-meta">
                         {m.direction === "OUT" && m.sender ? `${m.sender.name} · ` : ""}
                         {formatDateOnly(m.createdAt)} {new Date(m.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}

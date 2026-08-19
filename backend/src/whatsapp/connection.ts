@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import type { WAMessage, WAMessageContent } from "@whiskeysockets/baileys";
 import { prisma } from "../db";
 import { findOrCreateContact, normalizePhone } from "../utils/contacts";
+import { saveMedia } from "../utils/media";
 
 // Baileys 7.x é um pacote ESM puro ("type": "module"), enquanto o backend
 // roda em CommonJS. `import()` estático nesse cenário seria rebaixado pelo
@@ -99,32 +100,75 @@ function unwrapMessage(message: WAMessageContent | null | undefined): WAMessageC
   return envelope ? unwrapMessage(envelope) : message;
 }
 
-function extractText(baileys: Baileys, rawMessage: WAMessageContent | null | undefined): string | null {
+export type MediaType = "image" | "audio" | "video" | "document" | "sticker";
+
+const MEDIA_LABELS: Record<MediaType, string> = {
+  image: "Imagem",
+  audio: "Áudio",
+  video: "Vídeo",
+  document: "Documento",
+  sticker: "Figurinha",
+};
+
+interface ExtractedContent {
+  text: string | null;
+  mediaType: MediaType | null;
+  mediaMimeType: string | null;
+  mediaFileName: string | null;
+}
+
+function extractContent(baileys: Baileys, rawMessage: WAMessageContent | null | undefined): ExtractedContent {
+  const empty: ExtractedContent = { text: null, mediaType: null, mediaMimeType: null, mediaFileName: null };
   const message = unwrapMessage(rawMessage);
-  if (!message) return null;
+  if (!message) return empty;
   const type = baileys.getContentType(message);
   switch (type) {
     case "conversation":
-      return message.conversation ?? null;
+      return { ...empty, text: message.conversation ?? null };
     case "extendedTextMessage":
-      return message.extendedTextMessage?.text ?? null;
+      return { ...empty, text: message.extendedTextMessage?.text ?? null };
     case "imageMessage":
-      return message.imageMessage?.caption || "[Imagem]";
+      return {
+        text: message.imageMessage?.caption ?? null,
+        mediaType: "image",
+        mediaMimeType: message.imageMessage?.mimetype ?? "image/jpeg",
+        mediaFileName: null,
+      };
     case "videoMessage":
-      return message.videoMessage?.caption || "[Vídeo]";
+      return {
+        text: message.videoMessage?.caption ?? null,
+        mediaType: "video",
+        mediaMimeType: message.videoMessage?.mimetype ?? "video/mp4",
+        mediaFileName: null,
+      };
     case "audioMessage":
-      return message.audioMessage?.ptt ? "[Áudio]" : "[Arquivo de áudio]";
+      return {
+        text: null,
+        mediaType: "audio",
+        mediaMimeType: message.audioMessage?.mimetype ?? "audio/ogg",
+        mediaFileName: null,
+      };
     case "documentMessage":
-      return message.documentMessage?.caption || `[Documento] ${message.documentMessage?.fileName ?? ""}`.trim();
+      return {
+        text: message.documentMessage?.caption ?? null,
+        mediaType: "document",
+        mediaMimeType: message.documentMessage?.mimetype ?? "application/octet-stream",
+        mediaFileName: message.documentMessage?.fileName ?? null,
+      };
     case "stickerMessage":
-      return "[Figurinha]";
+      return {
+        text: null,
+        mediaType: "sticker",
+        mediaMimeType: message.stickerMessage?.mimetype ?? "image/webp",
+        mediaFileName: null,
+      };
     case "locationMessage":
-      return "[Localização]";
+      return { ...empty, text: "[Localização]" };
     case "contactMessage":
-      return "[Contato compartilhado]";
+      return { ...empty, text: "[Contato compartilhado]" };
     default:
-      appLog.info({ type }, "Tipo de mensagem sem extração de texto definida, ignorando.");
-      return null;
+      appLog.info({ type }, "Tipo de mensagem sem extração de conteúdo definida, ignorando.");
+      return empty;
   }
 }
 
@@ -148,9 +192,9 @@ async function persistIncomingOrEcho(baileys: Baileys, msg: WAMessage) {
   const already = await prisma.message.findUnique({ where: { whatsappMessageId } });
   if (already) return;
 
-  const text = extractText(baileys, msg.message);
-  if (!text) {
-    appLog.info({ whatsappMessageId, hasMessage: Boolean(msg.message) }, "Sem texto extraível, mensagem não gravada.");
+  const extracted = extractContent(baileys, msg.message);
+  if (!extracted.text && !extracted.mediaType) {
+    appLog.info({ whatsappMessageId, hasMessage: Boolean(msg.message) }, "Sem conteúdo extraível, mensagem não gravada.");
     return;
   }
 
@@ -159,16 +203,20 @@ async function persistIncomingOrEcho(baileys: Baileys, msg: WAMessage) {
   const pushName = !fromMe ? msg.pushName ?? null : null;
 
   const contact = await findOrCreateContact(phone, pushName, jid);
+  const content = extracted.text || (extracted.mediaType ? `[${MEDIA_LABELS[extracted.mediaType]}]` : "");
 
-  await prisma.$transaction([
+  const [message] = await prisma.$transaction([
     prisma.message.create({
       data: {
         contactId: contact.id,
         leadId: contact.currentLeadId,
-        content: text,
+        content,
         direction: fromMe ? "OUT" : "IN",
         senderId: null,
         whatsappMessageId,
+        mediaType: extracted.mediaType,
+        mediaMimeType: extracted.mediaMimeType,
+        mediaFileName: extracted.mediaFileName,
         createdAt: msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000) : new Date(),
       },
     }),
@@ -179,6 +227,16 @@ async function persistIncomingOrEcho(baileys: Baileys, msg: WAMessage) {
   ]);
 
   appLog.info({ whatsappMessageId, direction: fromMe ? "OUT" : "IN", contactId: contact.id }, "Mensagem gravada.");
+
+  if (extracted.mediaType && sock) {
+    try {
+      const buffer = await baileys.downloadMediaMessage(msg, "buffer", {}, { logger, reuploadRequest: sock.updateMediaMessage });
+      await saveMedia(message.id, buffer);
+      appLog.info({ messageId: message.id, mediaType: extracted.mediaType }, "Mídia baixada e salva.");
+    } catch (err) {
+      appLog.error({ err, messageId: message.id }, "Falha ao baixar mídia do WhatsApp.");
+    }
+  }
 }
 
 export async function startWhatsapp(): Promise<void> {
@@ -284,26 +342,30 @@ export async function logoutWhatsapp(): Promise<void> {
   setState({ status: "disconnected", qr: null, phone: null, lastError: null });
 }
 
-export async function sendWhatsappMessage(params: {
-  contactId: string;
-  text: string;
-  senderId: string;
-}): Promise<{ id: string; createdAt: Date }> {
+async function requireConnectedContact(contactId: string) {
   if (!sock || state.status !== "connected") {
     throw new Error("WhatsApp não está conectado.");
   }
-
-  const contact = await prisma.contact.findUnique({ where: { id: params.contactId } });
+  const contact = await prisma.contact.findUnique({ where: { id: contactId } });
   if (!contact) {
     throw new Error("Contato não encontrado.");
   }
-
   // Responder pro JID exato de onde a conversa aconteceu (guardado quando a
   // última mensagem chegou), nunca reconstruído a partir do telefone — ver
   // o comentário de resolvePhoneAndJid. Só reconstrói como último recurso,
   // pra contato criado manualmente que nunca mandou mensagem nenhuma.
   const jid = contact.whatsappJid ?? phoneToJid(contact.phone);
-  const result = await sock.sendMessage(jid, { text: params.text });
+  return { contact, jid };
+}
+
+export async function sendWhatsappMessage(params: {
+  contactId: string;
+  text: string;
+  senderId: string;
+}): Promise<{ id: string; createdAt: Date }> {
+  const { contact, jid } = await requireConnectedContact(params.contactId);
+
+  const result = await sock!.sendMessage(jid, { text: params.text });
   const whatsappMessageId = result?.key?.id;
   if (!whatsappMessageId) {
     throw new Error("Não foi possível confirmar o envio da mensagem.");
@@ -320,6 +382,53 @@ export async function sendWhatsappMessage(params: {
     },
   });
 
+  await prisma.contact.update({ where: { id: contact.id }, data: { lastMessageAt: new Date() } });
+
+  return { id: message.id, createdAt: message.createdAt };
+}
+
+export async function sendWhatsappMedia(params: {
+  contactId: string;
+  senderId: string;
+  buffer: Buffer;
+  mimeType: string;
+  mediaType: MediaType;
+  fileName?: string;
+  caption?: string;
+  ptt?: boolean;
+}): Promise<{ id: string; createdAt: Date }> {
+  const { contact, jid } = await requireConnectedContact(params.contactId);
+
+  const content =
+    params.mediaType === "image"
+      ? { image: params.buffer, caption: params.caption, mimetype: params.mimeType }
+      : params.mediaType === "video"
+      ? { video: params.buffer, caption: params.caption, mimetype: params.mimeType }
+      : params.mediaType === "audio"
+      ? { audio: params.buffer, mimetype: params.mimeType, ptt: params.ptt }
+      : { document: params.buffer, mimetype: params.mimeType, fileName: params.fileName, caption: params.caption };
+
+  const result = await sock!.sendMessage(jid, content);
+  const whatsappMessageId = result?.key?.id;
+  if (!whatsappMessageId) {
+    throw new Error("Não foi possível confirmar o envio da mensagem.");
+  }
+
+  const message = await prisma.message.create({
+    data: {
+      contactId: contact.id,
+      leadId: contact.currentLeadId,
+      content: params.caption || `[${MEDIA_LABELS[params.mediaType]}]`,
+      direction: "OUT",
+      senderId: params.senderId,
+      whatsappMessageId,
+      mediaType: params.mediaType,
+      mediaMimeType: params.mimeType,
+      mediaFileName: params.fileName ?? null,
+    },
+  });
+
+  await saveMedia(message.id, params.buffer);
   await prisma.contact.update({ where: { id: contact.id }, data: { lastMessageAt: new Date() } });
 
   return { id: message.id, createdAt: message.createdAt };

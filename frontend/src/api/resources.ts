@@ -112,3 +112,31 @@ export const archiveConversation = (contactId: string) =>
 
 export const createLeadFromConversation = (contactId: string, businessLine: BusinessLine) =>
   api.post<{ lead: Lead }>(`/conversations/${contactId}/lead`, { businessLine }).then((r) => r.data.lead);
+
+export const sendConversationMedia = (
+  contactId: string,
+  file: File | Blob,
+  options: { fileName?: string; caption?: string; ptt?: boolean } = {}
+) => {
+  const formData = new FormData();
+  formData.append("file", file, options.fileName ?? (file instanceof File ? file.name : "arquivo"));
+  if (options.caption) formData.append("caption", options.caption);
+  if (options.ptt) formData.append("ptt", "true");
+  return api
+    .post<{ message: Message }>(`/conversations/${contactId}/media`, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+    .then((r) => r.data.message);
+};
+
+export async function downloadMessageMedia(messageId: string, fileName: string) {
+  const response = await api.get(`/media/${messageId}`, { responseType: "blob" });
+  const url = URL.createObjectURL(response.data as Blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}

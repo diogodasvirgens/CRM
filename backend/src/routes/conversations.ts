@@ -1,12 +1,22 @@
 import { Router } from "express";
+import multer from "multer";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
 import { canAccessInbox, canWriteLeads } from "../utils/permissions";
-import { sendWhatsappMessage } from "../whatsapp/connection";
+import { MediaType, sendWhatsappMedia, sendWhatsappMessage } from "../whatsapp/connection";
 
 export const conversationsRouter = Router();
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 16 * 1024 * 1024 } });
+
+function mediaTypeFromMime(mimeType: string): MediaType {
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("video/")) return "video";
+  if (mimeType.startsWith("audio/")) return "audio";
+  return "document";
+}
 
 conversationsRouter.use(requireAuth);
 conversationsRouter.use((req, res, next) => {
@@ -119,6 +129,35 @@ conversationsRouter.post("/:contactId/messages", async (req, res) => {
     res.status(201).json({ message });
   } catch (err: any) {
     res.status(409).json({ error: err?.message ?? "Não foi possível enviar a mensagem." });
+  }
+});
+
+conversationsRouter.post("/:contactId/media", upload.single("file"), async (req, res) => {
+  const contact = await prisma.contact.findUnique({ where: { id: req.params.contactId } });
+  if (!contact) return res.status(404).json({ error: "Conversa não encontrada." });
+
+  if (!req.file) {
+    return res.status(400).json({ error: "Nenhum arquivo enviado." });
+  }
+
+  const mediaType = mediaTypeFromMime(req.file.mimetype);
+  const ptt = req.body.ptt === "true";
+  const caption = typeof req.body.caption === "string" && req.body.caption.trim() ? req.body.caption.trim() : undefined;
+
+  try {
+    const message = await sendWhatsappMedia({
+      contactId: contact.id,
+      senderId: req.user!.id,
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype,
+      mediaType,
+      fileName: req.file.originalname,
+      caption,
+      ptt,
+    });
+    res.status(201).json({ message });
+  } catch (err: any) {
+    res.status(409).json({ error: err?.message ?? "Não foi possível enviar o arquivo." });
   }
 });
 

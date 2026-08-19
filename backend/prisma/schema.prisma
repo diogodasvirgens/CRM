@@ -19,6 +19,7 @@ datasource db {
 // LeadOrigin: INDICACAO | REDES_SOCIAIS | RECORRENCIA | TRAFEGO_PAGO | OUTRO
 // HistoryField: STAGE | OWNER
 // MessageDirection: IN | OUT
+// MessageMediaType: image | audio | video | document | sticker
 
 model User {
   id                String   @id @default(cuid())
@@ -73,6 +74,9 @@ model Message {
   senderId          String?
   sender            User?    @relation("MessageSender", fields: [senderId], references: [id], onDelete: SetNull)
   whatsappMessageId String?  @unique
+  mediaType         String?
+  mediaMimeType     String?
+  mediaFileName     String?
   createdAt         DateTime @default(now())
 
   @@index([contactId])

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   archiveConversation,
@@ -6,6 +6,7 @@ import {
   fetchConversationMessages,
   fetchConversations,
   fetchStages,
+  sendConversationMedia,
   sendConversationMessage,
 } from "../api/resources";
 import { apiErrorMessage } from "../api/client";
@@ -14,6 +15,7 @@ import { useAuthStore } from "../state/auth";
 import { BusinessLine } from "../types";
 import { formatDateOnly } from "../utils/date";
 import { useDebouncedValue } from "../utils/useDebouncedValue";
+import { MessageMedia, messageHasVisibleCaption } from "../components/MessageMedia";
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -73,6 +75,61 @@ export function Inbox() {
     },
     onError: (err) => toast.show(apiErrorMessage(err), "error"),
   });
+
+  const sendMediaMutation = useMutation({
+    mutationFn: (payload: { contactId: string; file: File | Blob; fileName?: string; ptt?: boolean }) =>
+      sendConversationMedia(payload.contactId, payload.file, { fileName: payload.fileName, ptt: payload.ptt }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversation-messages", selectedId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+    onError: (err) => toast.show(apiErrorMessage(err), "error"),
+  });
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+
+  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !selectedId) return;
+    sendMediaMutation.mutate({ contactId: selectedId, file, fileName: file.name });
+  }
+
+  async function handleToggleRecording() {
+    if (!selectedId) return;
+
+    if (isRecording) {
+      mediaRecorderRef.current?.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recordedChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size > 0 && selectedId) {
+          sendMediaMutation.mutate({ contactId: selectedId, file: blob, fileName: "audio.webm", ptt: true });
+        }
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      toast.show("Não foi possível acessar o microfone.", "error");
+    }
+  }
 
   const archiveMutation = useMutation({
     mutationFn: (contactId: string) => archiveConversation(contactId),
@@ -219,7 +276,8 @@ export function Inbox() {
             <div className="inbox-messages">
               {messages.map((m) => (
                 <div key={m.id} className={`message-bubble ${m.direction === "OUT" ? "out" : "in"}`}>
-                  <div>{m.content}</div>
+                  <MessageMedia message={m} />
+                  {messageHasVisibleCaption(m) && <div>{m.content}</div>}
                   <div className="message-meta">
                     {m.direction === "OUT" && m.sender ? `${m.sender.name} · ` : ""}
                     {formatDateOnly(m.createdAt)} {formatTime(m.createdAt)}
@@ -230,6 +288,25 @@ export function Inbox() {
             </div>
 
             <form className="inbox-reply" onSubmit={handleSend}>
+              <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileSelected} />
+              <button
+                type="button"
+                className="btn btn-secondary btn-small"
+                title="Anexar arquivo ou foto"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sendMediaMutation.isPending || isRecording}
+              >
+                📎
+              </button>
+              <button
+                type="button"
+                className={`btn btn-small ${isRecording ? "btn-danger" : "btn-secondary"}`}
+                title={isRecording ? "Parar e enviar áudio" : "Gravar áudio"}
+                onClick={handleToggleRecording}
+                disabled={sendMediaMutation.isPending}
+              >
+                {isRecording ? "⏹" : "🎤"}
+              </button>
               <input
                 placeholder="Escreva uma mensagem..."
                 value={text}
