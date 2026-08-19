@@ -217,6 +217,12 @@ a {
   color: var(--brand-white);
 }
 
+.search-input {
+  flex: 1;
+  min-width: 200px;
+  max-width: 340px;
+}
+
 .board {
   flex: 1;
   display: grid;

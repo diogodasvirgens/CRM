@@ -43,13 +43,26 @@ function serializeContact(contact: any) {
 }
 
 conversationsRouter.get("/", async (req, res) => {
-  const showArchived = req.query.archived === "true";
+  const { archived, q, stageId } = req.query as Record<string, string | undefined>;
+  const showArchived = archived === "true";
 
   const contacts = await prisma.contact.findMany({
-    where: { archivedAt: showArchived ? { not: null } : null },
+    where: {
+      archivedAt: showArchived ? { not: null } : null,
+      currentLead: stageId ? (stageId === "none" ? null : { stageId }) : undefined,
+      OR: q
+        ? [
+            { name: { contains: q, mode: "insensitive" } },
+            { phone: { contains: q, mode: "insensitive" } },
+            { messages: { some: { content: { contains: q, mode: "insensitive" } } } },
+          ]
+        : undefined,
+    },
     include: {
       messages: { orderBy: { createdAt: "desc" }, take: 1 },
-      currentLead: { select: { id: true, contactName: true, businessLine: true, stage: { select: { name: true } } } },
+      currentLead: {
+        select: { id: true, contactName: true, businessLine: true, stage: { select: { id: true, name: true } } },
+      },
     },
     orderBy: [{ lastMessageAt: "desc" }, { createdAt: "desc" }],
   });

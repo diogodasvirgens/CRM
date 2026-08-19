@@ -5,6 +5,7 @@ import {
   createLeadFromConversation,
   fetchConversationMessages,
   fetchConversations,
+  fetchStages,
   sendConversationMessage,
 } from "../api/resources";
 import { apiErrorMessage } from "../api/client";
@@ -12,10 +13,13 @@ import { useToastStore } from "../state/toast";
 import { useAuthStore } from "../state/auth";
 import { BusinessLine } from "../types";
 import { formatDateOnly } from "../utils/date";
+import { useDebouncedValue } from "../utils/useDebouncedValue";
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
+
+const FUNNEL_LABELS: Record<BusinessLine, string> = { SHOW: "Shows contratados", EVENTO: "Eventos próprios" };
 
 export function Inbox() {
   const { user } = useAuthStore();
@@ -24,10 +28,20 @@ export function Inbox() {
   const [showArchived, setShowArchived] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [text, setText] = useState("");
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
+  const [stageFilter, setStageFilter] = useState("");
+
+  const stagesQuery = useQuery({ queryKey: ["stages"], queryFn: fetchStages });
+  const sortedStages = useMemo(
+    () => [...(stagesQuery.data ?? [])].sort((a, b) => a.businessLine.localeCompare(b.businessLine) || a.order - b.order),
+    [stagesQuery.data]
+  );
 
   const conversationsQuery = useQuery({
-    queryKey: ["conversations", showArchived],
-    queryFn: () => fetchConversations({ archived: showArchived }),
+    queryKey: ["conversations", showArchived, debouncedSearch, stageFilter],
+    queryFn: () =>
+      fetchConversations({ archived: showArchived, q: debouncedSearch || undefined, stageId: stageFilter || undefined }),
     refetchInterval: 4000,
   });
 
@@ -99,11 +113,31 @@ export function Inbox() {
               Arquivadas
             </button>
           </div>
+          <input
+            className="search-input"
+            style={{ maxWidth: "none", marginTop: 10 }}
+            placeholder="Buscar por nome, telefone ou mensagem..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select value={stageFilter} onChange={(e) => setStageFilter(e.target.value)} style={{ marginTop: 8, width: "100%" }}>
+            <option value="">Todas as etapas</option>
+            <option value="none">Sem lead vinculado</option>
+            {sortedStages.map((s) => (
+              <option key={s.id} value={s.id}>
+                {FUNNEL_LABELS[s.businessLine]} — {s.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         {conversations.length === 0 ? (
           <p className="hint-text" style={{ padding: 16 }}>
-            {showArchived ? "Nenhuma conversa arquivada." : "Nenhuma conversa ainda."}
+            {debouncedSearch || stageFilter
+              ? "Nenhuma conversa encontrada com esses filtros."
+              : showArchived
+              ? "Nenhuma conversa arquivada."
+              : "Nenhuma conversa ainda."}
           </p>
         ) : (
           <ul className="conversation-list">

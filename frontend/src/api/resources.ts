@@ -9,7 +9,7 @@ export const changePasswordRequest = (currentPassword: string, newPassword: stri
   api.put("/auth/change-password", { currentPassword, newPassword });
 
 // Leads
-export const fetchLeads = (params: { businessLine?: BusinessLine }) =>
+export const fetchLeads = (params: { businessLine?: BusinessLine; q?: string }) =>
   api.get<{ leads: Lead[] }>("/leads", { params }).then((r) => r.data.leads);
 
 export const fetchLead = (id: string) => api.get<{ lead: Lead }>(`/leads/${id}`).then((r) => r.data.lead);
@@ -94,7 +94,7 @@ export const fetchWhatsappStatus = () => api.get<WhatsappState>("/whatsapp/statu
 export const logoutWhatsapp = () => api.post("/whatsapp/logout");
 
 // Caixa de entrada
-export const fetchConversations = (params: { archived?: boolean } = {}) =>
+export const fetchConversations = (params: { archived?: boolean; q?: string; stageId?: string } = {}) =>
   api
     .get<{ conversations: Conversation[] }>("/conversations", { params })
     .then((r) => r.data.conversations);

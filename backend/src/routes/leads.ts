@@ -25,7 +25,7 @@ function serializeLead(lead: any) {
 }
 
 leadsRouter.get("/", async (req, res) => {
-  const { businessLine, stageId, ownerId, tagId } = req.query as Record<string, string | undefined>;
+  const { businessLine, stageId, ownerId, tagId, q } = req.query as Record<string, string | undefined>;
 
   const leads = await prisma.lead.findMany({
     where: {
@@ -33,6 +33,13 @@ leadsRouter.get("/", async (req, res) => {
       stageId,
       ownerId,
       tags: tagId ? { some: { tagId } } : undefined,
+      OR: q
+        ? [
+            { contactName: { contains: q, mode: "insensitive" } },
+            { notes: { contains: q, mode: "insensitive" } },
+            { contact: { phone: { contains: q, mode: "insensitive" } } },
+          ]
+        : undefined,
     },
     include: leadInclude,
     orderBy: { updatedAt: "desc" },

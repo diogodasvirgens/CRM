@@ -39,6 +39,11 @@ let starting = false;
 
 const sessionDir = path.join(__dirname, "../../whatsapp-session");
 const logger = pino({ level: process.env.WHATSAPP_LOG_LEVEL ?? "warn" });
+// Log próprio da integração (mensagens recebidas/gravadas), separado do
+// logger que passamos pro Baileys — sempre visível, não depende de
+// WHATSAPP_LOG_LEVEL, porque "não pode falhar em silêncio" vale também
+// pra nós conseguirmos diagnosticar o que está chegando.
+const appLog = pino({ level: "info", name: "whatsapp-inbox" });
 
 function setState(partial: Partial<ConnectionState>) {
   Object.assign(state, partial, { updatedAt: new Date() });
@@ -61,7 +66,27 @@ function phoneToJid(phone: string): string {
   return `${normalizePhone(phone)}@s.whatsapp.net`;
 }
 
-function extractText(baileys: Baileys, message: import("@whiskeysockets/baileys").proto.IMessage | null | undefined): string | null {
+type WAMessage = import("@whiskeysockets/baileys").proto.IMessage;
+
+// WhatsApp embrulha o conteúdo real dentro de mensagens "envelope" em vários
+// casos comuns: mensagem temporária (ephemeral), visualização única
+// (view-once) e eco de mensagem enviada por outro aparelho ligado à mesma
+// conta (deviceSentMessage). Sem desembrulhar isso, getContentType() devolve
+// o tipo do envelope (ex.: "ephemeralMessage") e a extração de texto abaixo
+// não reconhece nada, descartando a mensagem em silêncio.
+function unwrapMessage(message: WAMessage | null | undefined): WAMessage | null | undefined {
+  if (!message) return message;
+  const envelope =
+    message.ephemeralMessage?.message ??
+    message.viewOnceMessage?.message ??
+    message.viewOnceMessageV2?.message ??
+    message.viewOnceMessageV2Extension?.message ??
+    message.deviceSentMessage?.message;
+  return envelope ? unwrapMessage(envelope) : message;
+}
+
+function extractText(baileys: Baileys, rawMessage: WAMessage | null | undefined): string | null {
+  const message = unwrapMessage(rawMessage);
   if (!message) return null;
   const type = baileys.getContentType(message);
   switch (type) {
@@ -84,6 +109,7 @@ function extractText(baileys: Baileys, message: import("@whiskeysockets/baileys"
     case "contactMessage":
       return "[Contato compartilhado]";
     default:
+      appLog.info({ type }, "Tipo de mensagem sem extração de texto definida, ignorando.");
       return null;
   }
 }
@@ -92,18 +118,30 @@ async function persistIncomingOrEcho(
   baileys: Baileys,
   msg: import("@whiskeysockets/baileys").proto.IWebMessageInfo
 ) {
-  if (!msg.key) return;
+  if (!msg.key) {
+    appLog.info("Mensagem recebida sem key, ignorando.");
+    return;
+  }
   const remoteJid = msg.key.remoteJid;
-  if (!remoteJid || remoteJid.endsWith("@g.us") || remoteJid === "status@broadcast") return;
+  if (!remoteJid || remoteJid.endsWith("@g.us") || remoteJid === "status@broadcast") {
+    appLog.info({ remoteJid }, "Mensagem de grupo/status, ignorando.");
+    return;
+  }
 
   const whatsappMessageId = msg.key.id;
-  if (!whatsappMessageId) return;
+  if (!whatsappMessageId) {
+    appLog.info("Mensagem sem id, ignorando.");
+    return;
+  }
 
   const already = await prisma.message.findUnique({ where: { whatsappMessageId } });
   if (already) return;
 
   const text = extractText(baileys, msg.message);
-  if (!text) return;
+  if (!text) {
+    appLog.info({ whatsappMessageId, hasMessage: Boolean(msg.message) }, "Sem texto extraível, mensagem não gravada.");
+    return;
+  }
 
   const fromMe = Boolean(msg.key.fromMe);
   const phone = jidToPhone(remoteJid);
@@ -128,6 +166,8 @@ async function persistIncomingOrEcho(
       data: { lastMessageAt: new Date() },
     }),
   ]);
+
+  appLog.info({ whatsappMessageId, direction: fromMe ? "OUT" : "IN", contactId: contact.id }, "Mensagem gravada.");
 }
 
 export async function startWhatsapp(): Promise<void> {
@@ -156,15 +196,19 @@ export async function startWhatsapp(): Promise<void> {
       const { connection, qr, lastDisconnect } = update;
 
       if (qr) {
+        appLog.info("QR Code novo gerado, aguardando leitura.");
         setState({ status: "qr", qr });
       }
 
       if (connection === "open") {
-        setState({ status: "connected", qr: null, phone: jidToPhone(sock?.user?.id ?? ""), lastError: null });
+        const phone = jidToPhone(sock?.user?.id ?? "");
+        appLog.info({ phone }, "WhatsApp conectado.");
+        setState({ status: "connected", qr: null, phone, lastError: null });
       }
 
       if (connection === "close") {
         const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
+        appLog.info({ statusCode, message: lastDisconnect?.error?.message }, "Conexão com o WhatsApp encerrada.");
         // loggedOut: usuário desvinculou pelo celular. badSession: credenciais
         // corrompidas, tentar de novo com os mesmos arquivos só repetiria o
         // erro. Os dois exigem QR Code novo, não uma simples reconexão.
@@ -198,10 +242,11 @@ export async function startWhatsapp(): Promise<void> {
     });
 
     sock.ev.on("messages.upsert", ({ messages, type }) => {
+      appLog.info({ type, count: messages.length }, "messages.upsert recebido.");
       if (type !== "notify" && type !== "append") return;
       for (const msg of messages) {
         persistIncomingOrEcho(baileys, msg).catch((err) => {
-          logger.error({ err }, "Falha ao gravar mensagem do WhatsApp.");
+          appLog.error({ err }, "Falha ao gravar mensagem do WhatsApp.");
         });
       }
     });

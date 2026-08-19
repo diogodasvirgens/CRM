@@ -8,21 +8,26 @@ import { useToastStore } from "../state/toast";
 import { BusinessLine, Lead } from "../types";
 import { KanbanColumn } from "../components/KanbanColumn";
 import { LeadModal } from "../components/LeadModal";
+import { useDebouncedValue } from "../utils/useDebouncedValue";
 
 export function Kanban() {
   const { user } = useAuthStore();
   const toast = useToastStore();
   const queryClient = useQueryClient();
   const [businessLine, setBusinessLine] = useState<BusinessLine>("SHOW");
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
   const [modalState, setModalState] = useState<{ open: boolean; leadId: string | null; defaultStageId?: string }>({
     open: false,
     leadId: null,
   });
 
+  const leadsQueryKey = ["leads", businessLine, debouncedSearch] as const;
+
   const stagesQuery = useQuery({ queryKey: ["stages"], queryFn: fetchStages });
   const leadsQuery = useQuery({
-    queryKey: ["leads", businessLine],
-    queryFn: () => fetchLeads({ businessLine }),
+    queryKey: leadsQueryKey,
+    queryFn: () => fetchLeads({ businessLine, q: debouncedSearch || undefined }),
   });
 
   const stages = useMemo(
@@ -53,8 +58,8 @@ export function Kanban() {
     const lead = (leadsQuery.data ?? []).find((l) => l.id === draggableId);
     if (!lead || !canDragLead(lead)) return;
 
-    const previous = queryClient.getQueryData<Lead[]>(["leads", businessLine]);
-    queryClient.setQueryData<Lead[]>(["leads", businessLine], (old) =>
+    const previous = queryClient.getQueryData<Lead[]>(leadsQueryKey);
+    queryClient.setQueryData<Lead[]>(leadsQueryKey, (old) =>
       (old ?? []).map((l) => (l.id === draggableId ? { ...l, stageId: destination.droppableId } : l))
     );
 
@@ -62,7 +67,7 @@ export function Kanban() {
       await updateLead(draggableId, { stageId: destination.droppableId });
       queryClient.invalidateQueries({ queryKey: ["leads", businessLine] });
     } catch (err) {
-      queryClient.setQueryData(["leads", businessLine], previous);
+      queryClient.setQueryData(leadsQueryKey, previous);
       toast.show(apiErrorMessage(err), "error");
     }
   }
@@ -72,7 +77,7 @@ export function Kanban() {
   }
 
   function handleSaved() {
-    queryClient.invalidateQueries({ queryKey: ["leads", businessLine] });
+    queryClient.invalidateQueries({ queryKey: ["leads"] });
     closeModal();
   }
 
@@ -89,6 +94,12 @@ export function Kanban() {
             Eventos próprios
           </button>
         </div>
+        <input
+          className="search-input"
+          placeholder="Buscar por nome, telefone ou observações..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
         {canCreate && (
           <button
             className="btn btn-primary"

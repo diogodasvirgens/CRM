@@ -85,7 +85,7 @@ export interface Conversation {
   lastMessageAt: string | null;
   unread: boolean;
   lastMessage: { content: string; direction: MessageDirection; createdAt: string } | null;
-  currentLead: { id: string; contactName: string; businessLine: BusinessLine; stage: { name: string } } | null;
+  currentLead: { id: string; contactName: string; businessLine: BusinessLine; stage: { id: string; name: string } } | null;
 }
 
 export type WhatsappConnectionStatus = "disconnected" | "connecting" | "qr" | "connected" | "logged_out";
