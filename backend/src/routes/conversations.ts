@@ -168,7 +168,9 @@ conversationsRouter.post("/:contactId/lead", async (req, res) => {
       stageId: firstStage.id,
       origin: "OUTRO",
       originDetail: "Caixa de entrada do WhatsApp",
-      ownerId: req.user!.role === "ATENDENTE" ? req.user!.id : null,
+      // Quem converte a conversa em lead assume ele — mesma regra de "quem
+      // traz o lead pro funil vira responsável" usada ao mudar de etapa.
+      ownerId: req.user!.id,
     },
     include: { stage: true, owner: { select: { id: true, name: true } } },
   });
