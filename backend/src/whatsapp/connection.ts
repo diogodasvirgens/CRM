@@ -6,6 +6,7 @@ import type { WAMessage, WAMessageContent } from "@whiskeysockets/baileys";
 import { prisma } from "../db";
 import { findOrCreateContact, normalizePhone } from "../utils/contacts";
 import { saveMedia } from "../utils/media";
+import { transcodeToOggOpus } from "../utils/audio";
 
 // Baileys 7.x é um pacote ESM puro ("type": "module"), enquanto o backend
 // roda em CommonJS. `import()` estático nesse cenário seria rebaixado pelo
@@ -205,26 +206,38 @@ async function persistIncomingOrEcho(baileys: Baileys, msg: WAMessage) {
   const contact = await findOrCreateContact(phone, pushName, jid);
   const content = extracted.text || (extracted.mediaType ? `[${MEDIA_LABELS[extracted.mediaType]}]` : "");
 
-  const [message] = await prisma.$transaction([
-    prisma.message.create({
-      data: {
-        contactId: contact.id,
-        leadId: contact.currentLeadId,
-        content,
-        direction: fromMe ? "OUT" : "IN",
-        senderId: null,
-        whatsappMessageId,
-        mediaType: extracted.mediaType,
-        mediaMimeType: extracted.mediaMimeType,
-        mediaFileName: extracted.mediaFileName,
-        createdAt: msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000) : new Date(),
-      },
-    }),
-    prisma.contact.update({
-      where: { id: contact.id },
-      data: { lastMessageAt: new Date() },
-    }),
-  ]);
+  let message: { id: string };
+  try {
+    [message] = await prisma.$transaction([
+      prisma.message.create({
+        data: {
+          contactId: contact.id,
+          leadId: contact.currentLeadId,
+          content,
+          direction: fromMe ? "OUT" : "IN",
+          senderId: null,
+          whatsappMessageId,
+          mediaType: extracted.mediaType,
+          mediaMimeType: extracted.mediaMimeType,
+          mediaFileName: extracted.mediaFileName,
+          createdAt: msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000) : new Date(),
+        },
+      }),
+      prisma.contact.update({
+        where: { id: contact.id },
+        data: { lastMessageAt: new Date() },
+      }),
+    ]);
+  } catch (err: any) {
+    // Corrida com o nosso próprio envio: sendWhatsappMessage/sendWhatsappMedia
+    // já gravou essa mensagem (mesmo whatsappMessageId) entre o check acima
+    // e este insert — é só o eco chegando, não uma falha de verdade.
+    if (err?.code === "P2002") {
+      appLog.info({ whatsappMessageId }, "Eco do nosso próprio envio, já gravado antes.");
+      return;
+    }
+    throw err;
+  }
 
   appLog.info({ whatsappMessageId, direction: fromMe ? "OUT" : "IN", contactId: contact.id }, "Mensagem gravada.");
 
@@ -399,14 +412,27 @@ export async function sendWhatsappMedia(params: {
 }): Promise<{ id: string; createdAt: Date }> {
   const { contact, jid } = await requireConnectedContact(params.contactId);
 
+  // Mensagem de voz gravada no navegador vem em WebM/Opus. O upload até
+  // "funciona" nesse formato (o Baileys devolve um id de mensagem válido),
+  // mas o WhatsApp exige o contêiner OGG pra tratar como voice note de
+  // verdade — sem isso o áudio não toca do outro lado. Transcodifica antes
+  // de mandar como ptt, e o arquivo salvo localmente já fica no formato
+  // certo também (o player da própria caixa de entrada usa esse arquivo).
+  let buffer = params.buffer;
+  let mimeType = params.mimeType;
+  if (params.mediaType === "audio" && params.ptt) {
+    buffer = await transcodeToOggOpus(params.buffer);
+    mimeType = "audio/ogg; codecs=opus";
+  }
+
   const content =
     params.mediaType === "image"
-      ? { image: params.buffer, caption: params.caption, mimetype: params.mimeType }
+      ? { image: buffer, caption: params.caption, mimetype: mimeType }
       : params.mediaType === "video"
-      ? { video: params.buffer, caption: params.caption, mimetype: params.mimeType }
+      ? { video: buffer, caption: params.caption, mimetype: mimeType }
       : params.mediaType === "audio"
-      ? { audio: params.buffer, mimetype: params.mimeType, ptt: params.ptt }
-      : { document: params.buffer, mimetype: params.mimeType, fileName: params.fileName, caption: params.caption };
+      ? { audio: buffer, mimetype: mimeType, ptt: params.ptt }
+      : { document: buffer, mimetype: mimeType, fileName: params.fileName, caption: params.caption };
 
   const result = await sock!.sendMessage(jid, content);
   const whatsappMessageId = result?.key?.id;
@@ -423,12 +449,12 @@ export async function sendWhatsappMedia(params: {
       senderId: params.senderId,
       whatsappMessageId,
       mediaType: params.mediaType,
-      mediaMimeType: params.mimeType,
+      mediaMimeType: mimeType,
       mediaFileName: params.fileName ?? null,
     },
   });
 
-  await saveMedia(message.id, params.buffer);
+  await saveMedia(message.id, buffer);
   await prisma.contact.update({ where: { id: contact.id }, data: { lastMessageAt: new Date() } });
 
   return { id: message.id, createdAt: message.createdAt };

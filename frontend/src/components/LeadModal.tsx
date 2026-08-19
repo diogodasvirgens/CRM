@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createLead,
   createTag,
+  deleteConversationMessage,
   deleteLead,
   fetchEventEditions,
   fetchLead,
@@ -170,6 +171,17 @@ export function LeadModal({ businessLine, stages, leadId, defaultStageId, onClos
     try {
       await deleteLead(leadId);
       onSaved();
+    } catch (err) {
+      toast.show(apiErrorMessage(err), "error");
+    }
+  }
+
+  async function handleDeleteMessage(messageId: string) {
+    if (!lead) return;
+    if (!confirm("Apagar esta mensagem do CRM? Ela continua existindo no WhatsApp normalmente.")) return;
+    try {
+      await deleteConversationMessage(lead.contact.id, messageId);
+      queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
     } catch (err) {
       toast.show(apiErrorMessage(err), "error");
     }
@@ -407,6 +419,16 @@ export function LeadModal({ businessLine, stages, leadId, defaultStageId, onClos
                 <div className="inbox-messages" style={{ maxHeight: 260, border: "1px solid var(--border)", borderRadius: 6 }}>
                   {lead.contact.messages.map((m) => (
                     <div key={m.id} className={`message-bubble ${m.direction === "OUT" ? "out" : "in"}`}>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          className="message-delete-btn"
+                          title="Apagar mensagem"
+                          onClick={() => handleDeleteMessage(m.id)}
+                        >
+                          ×
+                        </button>
+                      )}
                       <MessageMedia message={m} />
                       {messageHasVisibleCaption(m) && <div>{m.content}</div>}
                       <div className="message-meta">

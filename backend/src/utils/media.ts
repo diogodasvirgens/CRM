@@ -20,3 +20,7 @@ export async function saveMedia(messageId: string, buffer: Buffer): Promise<void
 export function mediaExists(messageId: string): boolean {
   return fs.existsSync(mediaPathFor(messageId));
 }
+
+export async function deleteMedia(messageId: string): Promise<void> {
+  await fs.promises.rm(mediaPathFor(messageId), { force: true });
+}

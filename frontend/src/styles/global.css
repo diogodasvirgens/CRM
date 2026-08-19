@@ -828,6 +828,7 @@ th {
 }
 
 .message-bubble {
+  position: relative;
   max-width: 60%;
   padding: 8px 12px;
   border-radius: 10px;
@@ -845,6 +846,28 @@ th {
   align-self: flex-end;
   background: var(--brand-black);
   color: var(--brand-white);
+}
+
+.message-delete-btn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--brand-white);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.message-bubble:hover .message-delete-btn {
+  display: flex;
 }
 
 .message-meta {

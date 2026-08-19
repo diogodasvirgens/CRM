@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
 import { canAccessInbox, canWriteLeads } from "../utils/permissions";
+import { deleteMedia } from "../utils/media";
 import { MediaType, sendWhatsappMedia, sendWhatsappMessage } from "../whatsapp/connection";
 
 export const conversationsRouter = Router();
@@ -111,6 +112,25 @@ conversationsRouter.get("/:contactId/messages", async (req, res) => {
   await prisma.contact.update({ where: { id: contact.id }, data: { lastReadAt: new Date() } });
 
   res.json({ contact, messages });
+});
+
+// Apaga só o registro dentro do CRM (e o arquivo de mídia, se tiver) — não
+// tenta revogar a mensagem no WhatsApp em si. O WhatsApp só permite "apagar
+// pra todos" mensagens que a própria conta enviou, dentro de uma janela de
+// tempo curta; apagar aqui cobre qualquer mensagem, de qualquer direção, a
+// qualquer momento, então os dois comportamentos não seriam a mesma coisa.
+conversationsRouter.delete("/:contactId/messages/:messageId", async (req, res) => {
+  const message = await prisma.message.findUnique({ where: { id: req.params.messageId } });
+  if (!message || message.contactId !== req.params.contactId) {
+    return res.status(404).json({ error: "Mensagem não encontrada." });
+  }
+
+  await prisma.message.delete({ where: { id: message.id } });
+  if (message.mediaType) {
+    await deleteMedia(message.id);
+  }
+
+  res.json({ ok: true });
 });
 
 const sendMessageSchema = z.object({ text: z.string().min(1) });

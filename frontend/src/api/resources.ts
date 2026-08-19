@@ -107,6 +107,9 @@ export const fetchConversationMessages = (contactId: string) =>
 export const sendConversationMessage = (contactId: string, text: string) =>
   api.post<{ message: Message }>(`/conversations/${contactId}/messages`, { text }).then((r) => r.data.message);
 
+export const deleteConversationMessage = (contactId: string, messageId: string) =>
+  api.delete(`/conversations/${contactId}/messages/${messageId}`);
+
 export const archiveConversation = (contactId: string) =>
   api.post<{ contact: Contact }>(`/conversations/${contactId}/archive`).then((r) => r.data.contact);
 

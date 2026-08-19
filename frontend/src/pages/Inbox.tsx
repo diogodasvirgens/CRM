@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   archiveConversation,
   createLeadFromConversation,
+  deleteConversationMessage,
   fetchConversationMessages,
   fetchConversations,
   fetchStages,
@@ -140,6 +141,22 @@ export function Inbox() {
     onError: (err) => toast.show(apiErrorMessage(err), "error"),
   });
 
+  const deleteMessageMutation = useMutation({
+    mutationFn: (payload: { contactId: string; messageId: string }) =>
+      deleteConversationMessage(payload.contactId, payload.messageId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversation-messages", selectedId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+    onError: (err) => toast.show(apiErrorMessage(err), "error"),
+  });
+
+  function handleDeleteMessage(messageId: string) {
+    if (!selectedId) return;
+    if (!confirm("Apagar esta mensagem do CRM? Ela continua existindo no WhatsApp normalmente.")) return;
+    deleteMessageMutation.mutate({ contactId: selectedId, messageId });
+  }
+
   const createLeadMutation = useMutation({
     mutationFn: (payload: { contactId: string; businessLine: BusinessLine }) =>
       createLeadFromConversation(payload.contactId, payload.businessLine),
@@ -276,6 +293,14 @@ export function Inbox() {
             <div className="inbox-messages">
               {messages.map((m) => (
                 <div key={m.id} className={`message-bubble ${m.direction === "OUT" ? "out" : "in"}`}>
+                  <button
+                    type="button"
+                    className="message-delete-btn"
+                    title="Apagar mensagem"
+                    onClick={() => handleDeleteMessage(m.id)}
+                  >
+                    ×
+                  </button>
                   <MessageMedia message={m} />
                   {messageHasVisibleCaption(m) && <div>{m.content}</div>}
                   <div className="message-meta">
