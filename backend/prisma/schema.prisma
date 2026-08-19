@@ -1,0 +1,116 @@
+// Schema pensado para trocar o datasource "sqlite" por "postgresql" no futuro
+// sem mudar o resto do código (Prisma abstrai a diferença de queries).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite não tem suporte nativo a enum no Prisma, por isso os "enums" abaixo
+// são campos String validados na camada de aplicação (zod). Ao migrar para
+// PostgreSQL, dá para promovê-los a `enum` de verdade sem tocar no restante.
+//
+// Role: GESTOR | ATENDENTE | FINANCEIRO
+// BusinessLine: SHOW | EVENTO
+// LeadOrigin: INDICACAO | REDES_SOCIAIS | RECORRENCIA | TRAFEGO_PAGO | OUTRO
+// HistoryField: STAGE | OWNER
+
+model User {
+  id                String   @id @default(cuid())
+  name              String
+  email             String   @unique
+  passwordHash      String
+  role              String
+  active            Boolean  @default(true)
+  mustChangePassword Boolean @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  leadsOwned        Lead[]        @relation("LeadOwner")
+  historyChanges    LeadHistory[] @relation("HistoryChangedBy")
+}
+
+model Stage {
+  id           String       @id @default(cuid())
+  businessLine String
+  name         String
+  order        Int
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  leads        Lead[]
+
+  @@unique([businessLine, order])
+}
+
+model EventEdition {
+  id          String   @id @default(cuid())
+  name        String
+  date        DateTime?
+  location    String?
+  ticketPrice Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  leads       Lead[]
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  leads     LeadTag[]
+}
+
+model Lead {
+  id             String       @id @default(cuid())
+  contactName    String
+  phone          String
+  businessLine   String
+  stageId        String
+  stage          Stage        @relation(fields: [stageId], references: [id])
+  estimatedValue Float?
+  eventDate      DateTime?
+  ownerId        String?
+  owner          User?        @relation("LeadOwner", fields: [ownerId], references: [id])
+  origin         String
+  originDetail   String?
+  notes          String?
+  eventEditionId String?
+  eventEdition   EventEdition? @relation(fields: [eventEditionId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  tags           LeadTag[]
+  history        LeadHistory[]
+
+  @@index([businessLine])
+  @@index([stageId])
+  @@index([ownerId])
+}
+
+model LeadTag {
+  leadId String
+  tagId  String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([leadId, tagId])
+}
+
+model LeadHistory {
+  id            String       @id @default(cuid())
+  leadId        String
+  lead          Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  field         String
+  oldValue      String?
+  newValue      String?
+  changedById   String
+  changedBy     User         @relation("HistoryChangedBy", fields: [changedById], references: [id])
+  createdAt     DateTime     @default(now())
+}
