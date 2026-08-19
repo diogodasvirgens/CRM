@@ -1,3 +1,5 @@
+import path from "node:path";
+import fs from "node:fs";
 import express from "express";
 import cors from "cors";
 import { authRouter } from "./routes/auth";
@@ -14,12 +16,22 @@ app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-app.use("/auth", authRouter);
-app.use("/users", usersRouter);
-app.use("/stages", stagesRouter);
-app.use("/tags", tagsRouter);
-app.use("/event-editions", eventEditionsRouter);
-app.use("/leads", leadsRouter);
+app.use("/api/auth", authRouter);
+app.use("/api/users", usersRouter);
+app.use("/api/stages", stagesRouter);
+app.use("/api/tags", tagsRouter);
+app.use("/api/event-editions", eventEditionsRouter);
+app.use("/api/leads", leadsRouter);
+
+// Serve o frontend já compilado (frontend/dist) para que backend e frontend
+// respondam num único localhost. Rode `npm run build` no frontend antes.
+const frontendDist = path.join(__dirname, "../../frontend/dist");
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get(/^(?!\/api).*/, (_req, res) => {
+    res.sendFile(path.join(frontendDist, "index.html"));
+  });
+}
 
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);

@@ -25,32 +25,42 @@ Esta máquina não tem Node.js instalado (nem Homebrew). Antes de seguir os pass
 
 ## Instalação e execução local
 
-### 1. Backend
+Backend e frontend rodam juntos num único endereço: `http://localhost:3333`. O backend serve a API (em `/api`) e também os arquivos do frontend já compilado.
+
+### Primeira vez
 
 ```bash
 cd backend
-npm install
 cp .env.example .env
-npx prisma migrate dev
-npm run prisma:seed
-npm run dev
+cd ..
+npm run setup
 ```
 
-A API sobe em `http://localhost:3333`. O comando de seed cria as etapas iniciais dos dois funis e os três usuários de teste (veja abaixo).
+O `npm run setup` instala as dependências das duas partes, roda as migrações do banco e cria os usuários e etapas iniciais (o comando de seed).
 
-### 2. Frontend
-
-Em outro terminal:
+### Rodar o sistema
 
 ```bash
-cd frontend
-npm install
-npm run dev
+npm start
 ```
 
-A aplicação sobe em `http://localhost:5173` e já está configurada para conversar com a API em `localhost:3333` (proxy do Vite).
+Isso compila o frontend, compila o backend e sobe tudo. Acesse `http://localhost:3333` no navegador. Só existe essa uma porta.
 
-Acesse `http://localhost:5173` no navegador.
+### Modo desenvolvimento (com hot reload)
+
+Se for mexer no código e quiser recarregamento automático, rode backend e frontend separados, em dois terminais:
+
+```bash
+# terminal 1
+cd backend
+npm run dev        # API em http://localhost:3333
+
+# terminal 2
+cd frontend
+npm run dev         # interface em http://localhost:5173, já configurada para conversar com a API acima
+```
+
+Nesse modo use `http://localhost:5173` durante o desenvolvimento. Quando terminar de mexer, volte a usar `npm start` na raiz para o modo de porta única.
 
 ## Logins de teste
 
@@ -99,11 +109,19 @@ Não foi construído agora, mas o modelo de dados não trava:
 - **Fase 3** (agente de IA e Pix): a estrutura de lead e histórico já comporta anexar uma tabela de conversas no futuro sem redesenhar o resto.
 - **Fase 4** (custo e receita por evento): `EventEdition` e `Lead` já existem como entidades separadas, prontas para receber lançamentos financeiros futuros.
 
-## Comandos úteis do backend
+## Comandos úteis
+
+Na raiz do projeto:
+
+```bash
+npm run setup    # instala tudo, roda migração e seed (primeira vez)
+npm run build     # compila frontend e backend
+npm start          # builda e sobe tudo em http://localhost:3333
+```
+
+Dentro de `backend/`:
 
 ```bash
 npm run prisma:studio    # abre uma interface visual do banco
 npm run prisma:migrate   # cria uma nova migração após mudar o schema
-npm run build             # compila para dist/
-npm start                 # roda a versão compilada
 ```

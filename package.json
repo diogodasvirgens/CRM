@@ -1,0 +1,9 @@
+{
+  "name": "crm-diogo-das-virgens",
+  "private": true,
+  "scripts": {
+    "setup": "npm install --prefix backend && npm install --prefix frontend && npm run prisma:migrate:deploy --prefix backend && npm run prisma:seed --prefix backend",
+    "build": "npm run build --prefix frontend && npm run build --prefix backend",
+    "start": "npm run build && npm start --prefix backend"
+  }
+}
