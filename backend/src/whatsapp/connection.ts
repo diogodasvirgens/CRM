@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import pino from "pino";
 import QRCode from "qrcode";
+import type { WAMessage, WAMessageContent } from "@whiskeysockets/baileys";
 import { prisma } from "../db";
 import { findOrCreateContact, normalizePhone } from "../utils/contacts";
 
@@ -62,11 +63,24 @@ function jidToPhone(jid: string): string {
   return normalizePhone(jid.split("@")[0].split(":")[0]);
 }
 
+// O WhatsApp às vezes endereça um contato pelo LID (identificador interno,
+// não o número de telefone real) em vez do JID de número de telefone
+// (@s.whatsapp.net) — cada vez mais comum. Quando isso acontece, `remoteJid`
+// vem como "...@lid" e `remoteJidAlt` traz o JID de telefone correspondente.
+// Sem resolver isso: 1) o "telefone" salvo vira um número de LID sem sentido
+// (não bate com nenhum contato cadastrado manualmente) e 2) pior, reconstruir
+// um JID a partir desse número pra responder manda a mensagem pra um
+// endereço que não existe — ela nunca chega no destinatário nem sincroniza
+// no celular de quem enviou.
+function resolvePhoneAndJid(remoteJid: string, remoteJidAlt?: string | null): { phone: string; jid: string } {
+  const isLid = remoteJid.endsWith("@lid");
+  const preferredJid = isLid && remoteJidAlt && !remoteJidAlt.endsWith("@lid") ? remoteJidAlt : remoteJid;
+  return { phone: jidToPhone(preferredJid), jid: preferredJid };
+}
+
 function phoneToJid(phone: string): string {
   return `${normalizePhone(phone)}@s.whatsapp.net`;
 }
-
-type WAMessage = import("@whiskeysockets/baileys").proto.IMessage;
 
 // WhatsApp embrulha o conteúdo real dentro de mensagens "envelope" em vários
 // casos comuns: mensagem temporária (ephemeral), visualização única
@@ -74,7 +88,7 @@ type WAMessage = import("@whiskeysockets/baileys").proto.IMessage;
 // conta (deviceSentMessage). Sem desembrulhar isso, getContentType() devolve
 // o tipo do envelope (ex.: "ephemeralMessage") e a extração de texto abaixo
 // não reconhece nada, descartando a mensagem em silêncio.
-function unwrapMessage(message: WAMessage | null | undefined): WAMessage | null | undefined {
+function unwrapMessage(message: WAMessageContent | null | undefined): WAMessageContent | null | undefined {
   if (!message) return message;
   const envelope =
     message.ephemeralMessage?.message ??
@@ -85,7 +99,7 @@ function unwrapMessage(message: WAMessage | null | undefined): WAMessage | null 
   return envelope ? unwrapMessage(envelope) : message;
 }
 
-function extractText(baileys: Baileys, rawMessage: WAMessage | null | undefined): string | null {
+function extractText(baileys: Baileys, rawMessage: WAMessageContent | null | undefined): string | null {
   const message = unwrapMessage(rawMessage);
   if (!message) return null;
   const type = baileys.getContentType(message);
@@ -114,10 +128,7 @@ function extractText(baileys: Baileys, rawMessage: WAMessage | null | undefined)
   }
 }
 
-async function persistIncomingOrEcho(
-  baileys: Baileys,
-  msg: import("@whiskeysockets/baileys").proto.IWebMessageInfo
-) {
+async function persistIncomingOrEcho(baileys: Baileys, msg: WAMessage) {
   if (!msg.key) {
     appLog.info("Mensagem recebida sem key, ignorando.");
     return;
@@ -144,10 +155,10 @@ async function persistIncomingOrEcho(
   }
 
   const fromMe = Boolean(msg.key.fromMe);
-  const phone = jidToPhone(remoteJid);
+  const { phone, jid } = resolvePhoneAndJid(remoteJid, msg.key.remoteJidAlt);
   const pushName = !fromMe ? msg.pushName ?? null : null;
 
-  const contact = await findOrCreateContact(phone, pushName);
+  const contact = await findOrCreateContact(phone, pushName, jid);
 
   await prisma.$transaction([
     prisma.message.create({
@@ -274,7 +285,7 @@ export async function logoutWhatsapp(): Promise<void> {
 }
 
 export async function sendWhatsappMessage(params: {
-  phone: string;
+  contactId: string;
   text: string;
   senderId: string;
 }): Promise<{ id: string; createdAt: Date }> {
@@ -282,14 +293,22 @@ export async function sendWhatsappMessage(params: {
     throw new Error("WhatsApp não está conectado.");
   }
 
-  const jid = phoneToJid(params.phone);
+  const contact = await prisma.contact.findUnique({ where: { id: params.contactId } });
+  if (!contact) {
+    throw new Error("Contato não encontrado.");
+  }
+
+  // Responder pro JID exato de onde a conversa aconteceu (guardado quando a
+  // última mensagem chegou), nunca reconstruído a partir do telefone — ver
+  // o comentário de resolvePhoneAndJid. Só reconstrói como último recurso,
+  // pra contato criado manualmente que nunca mandou mensagem nenhuma.
+  const jid = contact.whatsappJid ?? phoneToJid(contact.phone);
   const result = await sock.sendMessage(jid, { text: params.text });
   const whatsappMessageId = result?.key?.id;
   if (!whatsappMessageId) {
     throw new Error("Não foi possível confirmar o envio da mensagem.");
   }
 
-  const contact = await findOrCreateContact(params.phone);
   const message = await prisma.message.create({
     data: {
       contactId: contact.id,

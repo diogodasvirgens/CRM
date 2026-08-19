@@ -43,6 +43,12 @@ model User {
 model Contact {
   id            String    @id @default(cuid())
   phone         String    @unique
+  // JID exato pra rotear mensagens de resposta (ex.: "5584...@s.whatsapp.net").
+  // O WhatsApp às vezes identifica um contato por LID em vez do número de
+  // telefone real (@lid); nesse caso `phone` guarda o número real (resolvido
+  // via remoteJidAlt) mas o envio precisa ir pro JID exato de onde a
+  // conversa está acontecendo, não um reconstruído a partir do telefone.
+  whatsappJid   String?
   name          String?
   archivedAt    DateTime?
   lastMessageAt DateTime?

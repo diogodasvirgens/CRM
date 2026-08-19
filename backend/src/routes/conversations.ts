@@ -97,7 +97,7 @@ conversationsRouter.post("/:contactId/messages", async (req, res) => {
   }
 
   try {
-    const message = await sendWhatsappMessage({ phone: contact.phone, text: parsed.data.text, senderId: req.user!.id });
+    const message = await sendWhatsappMessage({ contactId: contact.id, text: parsed.data.text, senderId: req.user!.id });
     res.status(201).json({ message });
   } catch (err: any) {
     res.status(409).json({ error: err?.message ?? "Não foi possível enviar a mensagem." });

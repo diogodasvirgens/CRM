@@ -11,16 +11,19 @@ export function normalizePhone(phone: string): string {
   return phone.replace(/\D/g, "");
 }
 
-export async function findOrCreateContact(phone: string, name?: string | null) {
+export async function findOrCreateContact(phone: string, name?: string | null, whatsappJid?: string | null) {
   const normalized = normalizePhone(phone);
 
   const existing = await prisma.contact.findUnique({ where: { phone: normalized } });
   if (existing) {
-    if (name && !existing.name) {
-      return prisma.contact.update({ where: { id: existing.id }, data: { name } });
+    const data: { name?: string; whatsappJid?: string } = {};
+    if (name && !existing.name) data.name = name;
+    if (whatsappJid && whatsappJid !== existing.whatsappJid) data.whatsappJid = whatsappJid;
+    if (Object.keys(data).length > 0) {
+      return prisma.contact.update({ where: { id: existing.id }, data });
     }
     return existing;
   }
 
-  return prisma.contact.create({ data: { phone: normalized, name: name ?? null } });
+  return prisma.contact.create({ data: { phone: normalized, name: name ?? null, whatsappJid: whatsappJid ?? null } });
 }
