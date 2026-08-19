@@ -21,6 +21,8 @@ frontend/    Aplicação React (kanban, cadastro de lead, administração)
 - Node.js 20 ou superior
 - npm
 
+Esta máquina não tem Node.js instalado (nem Homebrew). Antes de seguir os passos abaixo, baixe o instalador em [nodejs.org](https://nodejs.org) (versão LTS) e instale normalmente, ou instale via [nvm](https://github.com/nvm-sh/nvm) se preferir gerenciar versões. Depois confirme com `node --version` num terminal novo.
+
 ## Instalação e execução local
 
 ### 1. Backend
