@@ -190,7 +190,16 @@ leadsRouter.put("/:id", async (req, res) => {
 
   const data = parsed.data;
 
-  if (data.ownerId !== undefined && !canSetOwner(req.user!, data.ownerId)) {
+  // Quem move um lead sem responsável pra outra etapa assume ele
+  // automaticamente — só quando ninguém já é dono e ninguém pediu um
+  // responsável específico nesta mesma requisição.
+  let effectiveOwnerId = data.ownerId;
+  const stageChanging = Boolean(data.stageId && data.stageId !== existing.stageId);
+  if (stageChanging && existing.ownerId === null && effectiveOwnerId === undefined) {
+    effectiveOwnerId = req.user!.id;
+  }
+
+  if (effectiveOwnerId !== undefined && !canSetOwner(req.user!, effectiveOwnerId)) {
     return res.status(403).json({ error: "Você só pode atribuir o lead a si mesmo ou deixá-lo sem responsável." });
   }
 
@@ -209,7 +218,7 @@ leadsRouter.put("/:id", async (req, res) => {
 
   const historyEntries: { field: "STAGE" | "OWNER"; oldValue: string | null; newValue: string | null }[] = [];
 
-  if (data.stageId && data.stageId !== existing.stageId) {
+  if (stageChanging) {
     const [oldStage, newStage] = await Promise.all([
       prisma.stage.findUnique({ where: { id: existing.stageId } }),
       prisma.stage.findUnique({ where: { id: data.stageId } }),
@@ -218,10 +227,10 @@ leadsRouter.put("/:id", async (req, res) => {
     historyEntries.push({ field: "STAGE", oldValue: oldStage?.name ?? null, newValue: newStage.name });
   }
 
-  if (data.ownerId !== undefined && data.ownerId !== existing.ownerId) {
+  if (effectiveOwnerId !== undefined && effectiveOwnerId !== existing.ownerId) {
     const [oldOwner, newOwner] = await Promise.all([
       existing.ownerId ? prisma.user.findUnique({ where: { id: existing.ownerId } }) : null,
-      data.ownerId ? prisma.user.findUnique({ where: { id: data.ownerId } }) : null,
+      effectiveOwnerId ? prisma.user.findUnique({ where: { id: effectiveOwnerId } }) : null,
     ]);
     historyEntries.push({
       field: "OWNER",
@@ -240,7 +249,7 @@ leadsRouter.put("/:id", async (req, res) => {
       eventDate: data.eventDate !== undefined ? (data.eventDate ? new Date(data.eventDate) : null) : undefined,
       eventType: data.eventType,
       location: data.location,
-      ownerId: data.ownerId,
+      ownerId: effectiveOwnerId,
       origin: data.origin,
       originDetail: data.originDetail,
       notes: data.notes,
