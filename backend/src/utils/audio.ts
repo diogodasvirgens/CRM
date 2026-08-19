@@ -13,6 +13,12 @@ const execFileAsync = promisify(execFile);
  * (mesmo codec Opus, contêiner diferente) — mandar isso direto faz o upload
  * "funcionar" (o Baileys recebe um id de mensagem válido), mas o áudio não
  * toca do outro lado. Transcodificamos com ffmpeg antes de enviar.
+ *
+ * Container certo (OGG) não bastou: a mensagem chegava reconhecida como
+ * áudio mas muda. O perfil de mensagem de voz do WhatsApp espera mono a
+ * 16kHz — o navegador grava a 48kHz (às vezes estéreo), e sem forçar essa
+ * taxa de amostragem e o número de canais o áudio resultante não toca em
+ * alguns clientes mesmo com o contêiner/codec corretos.
  */
 export async function transcodeToOggOpus(buffer: Buffer): Promise<Buffer> {
   if (!ffmpegPath) {
@@ -25,7 +31,25 @@ export async function transcodeToOggOpus(buffer: Buffer): Promise<Buffer> {
 
   await fs.promises.writeFile(inputPath, buffer);
   try {
-    await execFileAsync(ffmpegPath, ["-y", "-i", inputPath, "-c:a", "libopus", "-b:a", "64k", "-vn", outputPath]);
+    await execFileAsync(ffmpegPath, [
+      "-y",
+      "-i",
+      inputPath,
+      "-avoid_negative_ts",
+      "make_zero",
+      "-ac",
+      "1",
+      "-ar",
+      "16000",
+      "-c:a",
+      "libopus",
+      "-b:a",
+      "32k",
+      "-vn",
+      "-f",
+      "ogg",
+      outputPath,
+    ]);
     return await fs.promises.readFile(outputPath);
   } finally {
     await fs.promises.rm(inputPath, { force: true });
