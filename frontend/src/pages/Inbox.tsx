@@ -89,8 +89,19 @@ export function Inbox() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingIntervalRef = useRef<number | null>(null);
+
+  function stopRecordingTimer() {
+    if (recordingIntervalRef.current !== null) {
+      window.clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+  }
+
+  useEffect(() => stopRecordingTimer, []);
 
   function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -105,6 +116,7 @@ export function Inbox() {
     if (isRecording) {
       mediaRecorderRef.current?.stop();
       setIsRecording(false);
+      stopRecordingTimer();
       return;
     }
 
@@ -118,6 +130,7 @@ export function Inbox() {
       };
       recorder.onstop = () => {
         stream.getTracks().forEach((track) => track.stop());
+        stopRecordingTimer();
         const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || "audio/webm" });
         if (blob.size > 0 && selectedId) {
           sendMediaMutation.mutate({ contactId: selectedId, file: blob, fileName: "audio.webm", ptt: true });
@@ -127,9 +140,17 @@ export function Inbox() {
       mediaRecorderRef.current = recorder;
       recorder.start();
       setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingIntervalRef.current = window.setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
     } catch {
       toast.show("Não foi possível acessar o microfone.", "error");
     }
+  }
+
+  function formatRecordingTime(totalSeconds: number) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   }
 
   const archiveMutation = useMutation({
@@ -332,13 +353,24 @@ export function Inbox() {
               >
                 {isRecording ? "⏹" : "🎤"}
               </button>
-              <input
-                placeholder="Escreva uma mensagem..."
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                disabled={sendMutation.isPending}
-              />
-              <button className="btn btn-primary" type="submit" disabled={sendMutation.isPending || !text.trim()}>
+              {isRecording ? (
+                <span className="recording-indicator">
+                  <span className="recording-dot" />
+                  Gravando... {formatRecordingTime(recordingSeconds)}
+                </span>
+              ) : (
+                <input
+                  placeholder="Escreva uma mensagem..."
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  disabled={sendMutation.isPending}
+                />
+              )}
+              <button
+                className="btn btn-primary"
+                type="submit"
+                disabled={sendMutation.isPending || isRecording || !text.trim()}
+              >
                 Enviar
               </button>
             </form>
