@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
 import { canEditLead, canSetOwner, canWriteLeads } from "../utils/permissions";
@@ -24,6 +25,26 @@ function serializeLead(lead: any) {
   };
 }
 
+// Busca tolerante a erro de digitação e sem distinção de acento (similaridade
+// por trigrama via pg_trgm + unaccent), em vez de substring exata. Telefone
+// compara só os dígitos, ignorando qualquer pontuação de formatação.
+async function findMatchingLeadIds(q: string): Promise<string[]> {
+  const digitsOnly = q.replace(/\D/g, "");
+
+  const conditions: Prisma.Sql[] = [
+    Prisma.sql`extensions.similarity(extensions.unaccent(l."contactName"), extensions.unaccent(${q})) > 0.2`,
+    Prisma.sql`extensions.similarity(extensions.unaccent(coalesce(l.notes, '')), extensions.unaccent(${q})) > 0.2`,
+  ];
+  if (digitsOnly) {
+    conditions.push(Prisma.sql`regexp_replace(c.phone, '\D', '', 'g') LIKE ${"%" + digitsOnly + "%"}`);
+  }
+
+  const rows = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+    SELECT l.id FROM "Lead" l JOIN "Contact" c ON c.id = l."contactId" WHERE ${Prisma.join(conditions, " OR ")}
+  `);
+  return rows.map((r) => r.id);
+}
+
 leadsRouter.get("/", async (req, res) => {
   const { businessLine, stageId, ownerId, tagId, q } = req.query as Record<string, string | undefined>;
 
@@ -33,13 +54,7 @@ leadsRouter.get("/", async (req, res) => {
       stageId,
       ownerId,
       tags: tagId ? { some: { tagId } } : undefined,
-      OR: q
-        ? [
-            { contactName: { contains: q, mode: "insensitive" } },
-            { notes: { contains: q, mode: "insensitive" } },
-            { contact: { phone: { contains: q, mode: "insensitive" } } },
-          ]
-        : undefined,
+      id: q ? { in: await findMatchingLeadIds(q) } : undefined,
     },
     include: leadInclude,
     orderBy: { updatedAt: "desc" },

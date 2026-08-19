@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth } from "../middleware/auth";
 import { canAccessInbox, canWriteLeads } from "../utils/permissions";
@@ -42,6 +43,29 @@ function serializeContact(contact: any) {
   };
 }
 
+// Mesma lógica de busca tolerante a erro de digitação/acento usada em leads
+// (ver findMatchingLeadIds em routes/leads.ts), aplicada a nome do contato e
+// conteúdo das mensagens; telefone compara só os dígitos.
+async function findMatchingContactIds(q: string): Promise<string[]> {
+  const digitsOnly = q.replace(/\D/g, "");
+
+  const conditions: Prisma.Sql[] = [
+    Prisma.sql`extensions.similarity(extensions.unaccent(coalesce(c.name, '')), extensions.unaccent(${q})) > 0.2`,
+    Prisma.sql`EXISTS (
+      SELECT 1 FROM "Message" m
+      WHERE m."contactId" = c.id AND extensions.similarity(extensions.unaccent(m.content), extensions.unaccent(${q})) > 0.2
+    )`,
+  ];
+  if (digitsOnly) {
+    conditions.push(Prisma.sql`regexp_replace(c.phone, '\D', '', 'g') LIKE ${"%" + digitsOnly + "%"}`);
+  }
+
+  const rows = await prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
+    SELECT c.id FROM "Contact" c WHERE ${Prisma.join(conditions, " OR ")}
+  `);
+  return rows.map((r) => r.id);
+}
+
 conversationsRouter.get("/", async (req, res) => {
   const { archived, q, stageId } = req.query as Record<string, string | undefined>;
   const showArchived = archived === "true";
@@ -50,13 +74,7 @@ conversationsRouter.get("/", async (req, res) => {
     where: {
       archivedAt: showArchived ? { not: null } : null,
       currentLead: stageId ? (stageId === "none" ? null : { stageId }) : undefined,
-      OR: q
-        ? [
-            { name: { contains: q, mode: "insensitive" } },
-            { phone: { contains: q, mode: "insensitive" } },
-            { messages: { some: { content: { contains: q, mode: "insensitive" } } } },
-          ]
-        : undefined,
+      id: q ? { in: await findMatchingContactIds(q) } : undefined,
     },
     include: {
       messages: { orderBy: { createdAt: "desc" }, take: 1 },
