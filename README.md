@@ -39,6 +39,8 @@ cp .env.example .env
 
 Edite `backend/.env` e troque `[YOUR-PASSWORD]` no `DATABASE_URL` pela senha do seu projeto Supabase (Project Settings → Database → Database Password).
 
+O `DATABASE_URL` já vem apontando pro **pooler** do Supabase (`aws-0-us-west-2.pooler.supabase.com:6543`), não pro host direto (`db.<ref>.supabase.co:5432`). O host direto só resolve em IPv6 — em rede sem IPv6 funcionando (bem comum), a conexão trava sem erro nenhum na hora, só demora e falha depois. O pooler resolve em IPv4 e funciona em qualquer rede.
+
 ```bash
 cd ..
 npm run setup
