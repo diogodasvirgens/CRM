@@ -72,6 +72,16 @@ npm run dev         # interface em http://localhost:5173, já configurada para c
 
 Nesse modo use `http://localhost:5173` durante o desenvolvimento. Quando terminar de mexer, volte a usar `npm start` na raiz para o modo de porta única.
 
+## Hospedar o frontend separado (ex.: Vercel)
+
+O backend (API, banco, conexão do WhatsApp) precisa de um processo que fique sempre ligado — Baileys mantém uma conexão persistente com o WhatsApp, o que não roda numa função serverless (Vercel, Supabase Edge Functions). Só o **frontend** (arquivo estático, o resultado de `npm run build`) pode ser hospedado separado num serviço assim.
+
+1. No painel do Vercel, em **Project Settings → General → Root Directory**, aponte pra pasta `frontend`. Sem isso o Vercel roda `npm install` só na raiz do repositório (que não tem `typescript` nem `vite`) e o build falha com `tsc: command not found`.
+2. Em **Project Settings → Environment Variables**, crie `VITE_API_BASE_URL` apontando pra URL pública do backend, incluindo `/api` no final (ex.: `https://seu-backend.up.railway.app/api`). Sem essa variável o frontend tenta chamar `/api` relativo ao próprio domínio do Vercel, onde não existe backend nenhum.
+3. `frontend/vercel.json` já redireciona qualquer rota pro `index.html` — necessário porque o app usa rotas do lado do cliente (`/conversas`, `/admin/etapas` etc.), senão recarregar a página numa rota que não seja `/` dá 404.
+
+O backend em si (API + WhatsApp) precisa rodar em algum lugar com processo persistente e disco (Railway, Fly.io ou uma VPS) — não é possível hospedar ele no Vercel.
+
 ## Como parear o WhatsApp pela primeira vez
 
 1. Suba o sistema (`npm start` ou o modo desenvolvimento) e faça login com um usuário **Gestor**.
