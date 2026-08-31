@@ -1,13 +1,8 @@
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { loginRequest } from "../api/resources";
-import { apiErrorMessage } from "../api/client";
-import { useAuthStore } from "../state/auth";
+import { supabase } from "../api/supabaseClient";
 
 export function Login() {
-  // Seleciona só a ação (não o token) para não re-renderizar e disparar
-  // navegação duplicada assim que o login grava a sessão.
-  const setSession = useAuthStore((s) => s.setSession);
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,11 +14,31 @@ export function Login() {
     setError(null);
     setLoading(true);
     try {
-      const { data } = await loginRequest(email, password);
-      setSession(data.token, data.user);
-      navigate(data.user.mustChangePassword ? "/trocar-senha" : "/", { replace: true });
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError || !data.user) {
+        throw authError ?? new Error("Não foi possível entrar.");
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("active, must_change_password")
+        .eq("id", data.user.id)
+        .single();
+
+      if (!profile || !profile.active) {
+        await supabase.auth.signOut();
+        throw new Error("Usuário inativo ou não encontrado.");
+      }
+
+      navigate(profile.must_change_password ? "/trocar-senha" : "/", { replace: true });
     } catch (err) {
-      setError(apiErrorMessage(err, "E-mail ou senha incorretos."));
+      const message =
+        err instanceof Error && err.message === "Invalid login credentials"
+          ? "E-mail ou senha incorretos."
+          : err instanceof Error
+          ? err.message
+          : "E-mail ou senha incorretos.";
+      setError(message);
     } finally {
       setLoading(false);
     }

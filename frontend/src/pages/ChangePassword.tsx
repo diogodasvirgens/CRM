@@ -1,7 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { changePasswordRequest } from "../api/resources";
-import { apiErrorMessage } from "../api/client";
+import { supabase } from "../api/supabaseClient";
 import { useAuthStore } from "../state/auth";
 import { useToastStore } from "../state/toast";
 
@@ -23,15 +22,30 @@ export function ChangePassword() {
       setError("A confirmação não bate com a nova senha.");
       return;
     }
+    if (!user) return;
 
     setLoading(true);
     try {
-      await changePasswordRequest(currentPassword, newPassword);
+      // Confere a senha atual reautenticando antes de trocar (o
+      // updateUser do Supabase não pede a senha atual por conta própria).
+      const { error: reauthError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+      if (reauthError) {
+        throw new Error("Senha atual incorreta.");
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
+
+      await supabase.from("profiles").update({ must_change_password: false }).eq("id", user.id);
+
       updateUser({ mustChangePassword: false });
       toast.show("Senha trocada com sucesso.");
       navigate("/");
     } catch (err) {
-      setError(apiErrorMessage(err));
+      setError(err instanceof Error ? err.message : "Algo deu errado. Tente novamente.");
     } finally {
       setLoading(false);
     }

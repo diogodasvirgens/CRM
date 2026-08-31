@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuthStore } from "./state/auth";
 import { Layout } from "./components/Layout";
@@ -14,8 +14,12 @@ import { AdminWhatsapp } from "./pages/Admin/AdminWhatsapp";
 import { Inbox } from "./pages/Inbox";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
-  const { token, user } = useAuthStore();
-  if (!token || !user) return <Navigate to="/login" replace />;
+  const { user, loading } = useAuthStore();
+  // A sessão do Supabase é restaurada de forma assíncrona ao carregar o
+  // app; espera resolver antes de decidir (senão redireciona pro login
+  // por uma fração de segundo mesmo com sessão salva).
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
   return children;
 }
 
@@ -32,10 +36,20 @@ function RequireInboxAccess({ children }: { children: JSX.Element }) {
 }
 
 function LoginRoute() {
-  // Lido uma vez, sem assinar mudanças: evita competir com o navigate()
+  // Decide uma única vez, assim que a sessão inicial termina de carregar,
+  // e não reage a mudanças depois disso — evita competir com o navigate()
   // explícito do próprio formulário de login logo após autenticar.
-  const [alreadyLoggedIn] = useState(() => Boolean(useAuthStore.getState().token));
-  if (alreadyLoggedIn) return <Navigate to="/" replace />;
+  const loading = useAuthStore((s) => s.loading);
+  const [decided, setDecided] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!loading && decided === null) {
+      setDecided(Boolean(useAuthStore.getState().user));
+    }
+  }, [loading, decided]);
+
+  if (loading || decided === null) return null;
+  if (decided) return <Navigate to="/" replace />;
   return <Login />;
 }
 
