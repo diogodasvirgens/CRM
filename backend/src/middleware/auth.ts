@@ -1,7 +1,6 @@
 import { NextFunction, Request, Response } from "express";
-import jwt from "jsonwebtoken";
-import { env } from "../env";
 import { prisma } from "../db";
+import { supabase } from "../supabaseClient";
 import { Role } from "../types";
 
 export interface AuthUser {
@@ -9,7 +8,6 @@ export interface AuthUser {
   name: string;
   email: string;
   role: Role;
-  mustChangePassword: boolean;
 }
 
 declare global {
@@ -29,23 +27,24 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   const token = header.slice("Bearer ".length);
 
-  try {
-    const payload = jwt.verify(token, env.jwtSecret) as { sub: string };
-    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-
-    if (!user || !user.active) {
-      return res.status(401).json({ error: "Usuário inválido ou inativo." });
-    }
-
-    req.user = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role as Role,
-      mustChangePassword: user.mustChangePassword,
-    };
-    next();
-  } catch {
+  // O frontend agora manda o access_token do Supabase Auth (não mais um JWT
+  // customizado). auth.getUser valida a assinatura/expiração de verdade
+  // junto ao Supabase.
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data.user) {
     return res.status(401).json({ error: "Token inválido ou expirado." });
   }
+
+  const profile = await prisma.profile.findUnique({ where: { id: data.user.id } });
+  if (!profile || !profile.active) {
+    return res.status(401).json({ error: "Usuário inválido ou inativo." });
+  }
+
+  req.user = {
+    id: profile.id,
+    name: profile.name,
+    email: profile.email,
+    role: profile.role as Role,
+  };
+  next();
 }

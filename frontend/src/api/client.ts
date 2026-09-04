@@ -1,5 +1,5 @@
 import axios from "axios";
-import { useAuthStore } from "../state/auth";
+import { supabase } from "./supabaseClient";
 
 // Em modo porta única (backend servindo o frontend já compilado), "/api" já
 // é o caminho certo. Quando o frontend é hospedado separado (ex.: Vercel) e
@@ -7,23 +7,18 @@ import { useAuthStore } from "../state/auth";
 // (ex.: "https://seu-backend.up.railway.app/api").
 export const api = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL || "/api" });
 
-api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token;
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// O backend Express (só o que depende do Baileys — WhatsApp e mídia) agora
+// valida o JWT do Supabase Auth, não mais um token customizado. Anexa o
+// access_token da sessão atual em toda chamada.
+api.interceptors.request.use(async (config) => {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    config.headers.Authorization = `Bearer ${session.access_token}`;
   }
   return config;
 });
-
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      useAuthStore.getState().logout();
-    }
-    return Promise.reject(error);
-  }
-);
 
 export function apiErrorMessage(error: unknown, fallback = "Algo deu errado. Tente novamente."): string {
   if (axios.isAxiosError(error) && error.response?.data?.error) {

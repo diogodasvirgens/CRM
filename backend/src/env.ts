@@ -7,6 +7,7 @@ function required(name: string): string {
 }
 
 export const env = {
-  jwtSecret: required("JWT_SECRET"),
+  supabaseUrl: required("SUPABASE_URL"),
+  supabaseAnonKey: required("SUPABASE_ANON_KEY"),
   port: Number(process.env.PORT ?? 3333),
 };

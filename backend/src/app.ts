@@ -2,16 +2,15 @@ import path from "node:path";
 import fs from "node:fs";
 import express from "express";
 import cors from "cors";
-import { authRouter } from "./routes/auth";
-import { usersRouter } from "./routes/users";
-import { stagesRouter } from "./routes/stages";
-import { tagsRouter } from "./routes/tags";
-import { eventEditionsRouter } from "./routes/eventEditions";
-import { leadsRouter } from "./routes/leads";
 import { whatsappRouter } from "./routes/whatsapp";
 import { conversationsRouter } from "./routes/conversations";
 import { mediaRouter } from "./routes/media";
 
+// Backend reduzido só ao que depende do Baileys (a conexão com o WhatsApp
+// em si não roda em função serverless, precisa de processo persistente).
+// Autenticação, leads, etapas, etiquetas, edições de evento e usuários
+// migraram pra chamadas diretas do frontend ao Supabase (RLS + RPC) —
+// ver frontend/src/api/resources.ts e supabase/functions/admin-users.
 export const app = express();
 
 app.use(cors());
@@ -19,12 +18,6 @@ app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-app.use("/api/auth", authRouter);
-app.use("/api/users", usersRouter);
-app.use("/api/stages", stagesRouter);
-app.use("/api/tags", tagsRouter);
-app.use("/api/event-editions", eventEditionsRouter);
-app.use("/api/leads", leadsRouter);
 app.use("/api/whatsapp", whatsappRouter);
 app.use("/api/conversations", conversationsRouter);
 app.use("/api/media", mediaRouter);
