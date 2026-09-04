@@ -3,95 +3,91 @@
 Sistema de CRM para gerenciar leads e funil de vendas dos dois negócios: **Shows contratados** e **Eventos próprios**.
 
 - **Fase 1**: cadastro manual de lead, kanban por funil, login multiusuário com papéis, etiquetas livres e tela de administração.
-- **Fase 2** (atual): conexão com um número real de WhatsApp (via Baileys) e caixa de entrada dentro do CRM, onde a equipe lê as conversas e decide o que virar lead. Mensagem nova **não** cria lead sozinha — isso fica pra Fase 3, quando um agente de IA assume essa triagem.
+- **Fase 2**: conexão com um número real de WhatsApp e caixa de entrada dentro do CRM, onde a equipe lê as conversas e decide o que virar lead. Mensagem nova **não** cria lead sozinha — isso fica pra Fase 3, quando um agente de IA assume essa triagem.
 
 ## Stack
 
-- **Backend**: Node.js, Express, TypeScript, Prisma, PostgreSQL (hospedado no Supabase), JWT, [Baileys](https://github.com/WhiskeySockets/Baileys) para a conexão com o WhatsApp.
-- **Frontend**: React, TypeScript, Vite, React Query, Zustand, @hello-pangea/dnd para o drag and drop do kanban.
+- **Frontend**: React, TypeScript, Vite, React Query, Zustand, @hello-pangea/dnd para o drag and drop do kanban. Aplicação 100% estática (sem backend próprio), hospedada na Vercel.
+- **Dados/autenticação**: [Supabase](https://supabase.com) — Postgres com Row Level Security, Supabase Auth, Storage (mídia do WhatsApp) e Edge Functions (ações privilegiadas: administração de usuários e integração com WhatsApp).
+- **WhatsApp**: [UAZAPI](https://uazapi.com), uma API hospedada que mantém a conexão com o WhatsApp do lado dela — o CRM só fala REST/webhook com ela, sem precisar de processo próprio sempre ligado.
 
 ## Estrutura
 
 ```
-backend/     API REST, Prisma, autenticação, regras de permissão e a conexão com o WhatsApp
-frontend/    Aplicação React (kanban, caixa de entrada, cadastro de lead, administração)
+src/          Aplicação React (kanban, caixa de entrada, cadastro de lead, administração)
+public/       Arquivos estáticos servidos como estão
+supabase/
+  functions/  Edge Functions (Deno) — admin-users, whatsapp-send, whatsapp-webhook, whatsapp-connection
 ```
+
+Todo o schema do banco (tabelas, RLS, triggers, funções RPC) vive só no projeto Supabase — não há pasta de migrations neste repositório.
 
 ## Pré-requisitos
 
 - Node.js 20 ou superior
 - npm
-- Um projeto Postgres no [Supabase](https://supabase.com) (o `DATABASE_URL` do backend aponta pra lá)
-- Um número de WhatsApp pra parear (recomendado: um número dedicado ao negócio, não o pessoal — veja o aviso na seção de pareamento abaixo)
+- Um projeto no [Supabase](https://supabase.com)
+- Uma instância na [UAZAPI](https://uazapi.com) (ou outro provedor de API hospedada de WhatsApp) já conectada a um número
 
 Se `node --version` não funcionar num terminal novo, baixe o instalador em [nodejs.org](https://nodejs.org) (versão LTS) e instale normalmente, ou instale via [nvm](https://github.com/nvm-sh/nvm) se preferir gerenciar versões.
 
 ## Instalação e execução local
 
-Backend e frontend rodam juntos num único endereço: `http://localhost:3333`. O backend serve a API (em `/api`) e também os arquivos do frontend já compilado.
-
-### Primeira vez
-
 ```bash
-cd backend
 cp .env.example .env
 ```
 
-Edite `backend/.env` e troque `[YOUR-PASSWORD]` no `DATABASE_URL` pela senha do seu projeto Supabase (Project Settings → Database → Database Password).
-
-O `DATABASE_URL` já vem apontando pro **pooler** do Supabase (`aws-0-us-west-2.pooler.supabase.com:6543`), não pro host direto (`db.<ref>.supabase.co:5432`). O host direto só resolve em IPv6 — em rede sem IPv6 funcionando (bem comum), a conexão trava sem erro nenhum na hora, só demora e falha depois. O pooler resolve em IPv4 e funciona em qualquer rede.
+Edite `.env` com a URL e a chave publicável (`anon`/`publishable`) do seu projeto Supabase (Project Settings → API).
 
 ```bash
-cd ..
-npm run setup
+npm install
+npm run dev
 ```
 
-O `npm run setup` instala as dependências das duas partes, roda as migrações do banco e cria os usuários e etapas iniciais (o comando de seed).
+Acesse `http://localhost:5173`.
 
-### Rodar o sistema
+### Build de produção
 
 ```bash
-npm start
+npm run build     # gera a pasta dist/
+npm run preview   # serve o build localmente pra conferir
 ```
 
-Isso compila o frontend, compila o backend e sobe tudo. Acesse `http://localhost:3333` no navegador. Só existe essa uma porta.
+## Hospedagem (Vercel)
 
-### Modo desenvolvimento (com hot reload)
+Não existe mais backend — é só um app estático.
 
-Se for mexer no código e quiser recarregamento automático, rode backend e frontend separados, em dois terminais:
+1. Importe o repositório na Vercel normalmente (Root Directory = raiz do repo).
+2. Em **Project Settings → Environment Variables**, configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY`.
+3. `vercel.json` já redireciona qualquer rota pro `index.html` — necessário porque o app usa rotas do lado do cliente (`/conversas`, `/admin/etapas` etc.), senão recarregar a página numa rota que não seja `/` dá 404.
+
+## Configuração da UAZAPI e das Edge Functions
+
+O envio de mensagem/mídia, o status/QR de conexão e o recebimento de mensagens não passam pelo frontend nem por nenhum backend próprio — são três Edge Functions do Supabase que falam com a UAZAPI:
+
+| Função | O que faz | Quem chama |
+|---|---|---|
+| `whatsapp-send` | Envia texto/mídia pela UAZAPI e grava a mensagem no banco | Frontend (usuário logado, exceto Financeiro) |
+| `whatsapp-connection` | Status da conexão, gerar QR, desconectar | Frontend, só Gestor |
+| `whatsapp-webhook` | Recebe mensagens novas da UAZAPI e grava no banco | UAZAPI (chamada pública, protegida por segredo próprio na URL) |
+
+As credenciais da UAZAPI (URL da instância, token, segredo do webhook) ficam guardadas criptografadas no **Supabase Vault**, nunca em variável de ambiente do frontend nem hardcoded no código. As Edge Functions leem esses valores através da função `get_whatsapp_config()` (RPC restrita a `service_role`).
+
+Pra apontar o webhook da UAZAPI pra este projeto:
 
 ```bash
-# terminal 1
-cd backend
-npm run dev        # API em http://localhost:3333
-
-# terminal 2
-cd frontend
-npm run dev         # interface em http://localhost:5173, já configurada para conversar com a API acima
+curl -X POST "https://SEU-DOMINIO.uazapi.com/webhook" \
+  -H "token: SEU_TOKEN_DE_INSTANCIA" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "enabled": true,
+    "url": "https://SEU_PROJETO.supabase.co/functions/v1/whatsapp-webhook?key=SEU_SEGREDO",
+    "events": ["messages"],
+    "excludeMessages": ["wasSentByApi"]
+  }'
 ```
 
-Nesse modo use `http://localhost:5173` durante o desenvolvimento. Quando terminar de mexer, volte a usar `npm start` na raiz para o modo de porta única.
-
-## Hospedar o frontend separado (ex.: Vercel)
-
-O backend (API, banco, conexão do WhatsApp) precisa de um processo que fique sempre ligado — Baileys mantém uma conexão persistente com o WhatsApp, o que não roda numa função serverless (Vercel, Supabase Edge Functions). Só o **frontend** (arquivo estático, o resultado de `npm run build`) pode ser hospedado separado num serviço assim.
-
-1. No painel do Vercel, em **Project Settings → General → Root Directory**, aponte pra pasta `frontend`. Sem isso o Vercel roda `npm install` só na raiz do repositório (que não tem `typescript` nem `vite`) e o build falha com `tsc: command not found`.
-2. Em **Project Settings → Environment Variables**, crie `VITE_API_BASE_URL` apontando pra URL pública do backend, incluindo `/api` no final (ex.: `https://seu-backend.up.railway.app/api`). Sem essa variável o frontend tenta chamar `/api` relativo ao próprio domínio do Vercel, onde não existe backend nenhum.
-3. `frontend/vercel.json` já redireciona qualquer rota pro `index.html` — necessário porque o app usa rotas do lado do cliente (`/conversas`, `/admin/etapas` etc.), senão recarregar a página numa rota que não seja `/` dá 404.
-
-O backend em si (API + WhatsApp) precisa rodar em algum lugar com processo persistente e disco (Railway, Fly.io ou uma VPS) — não é possível hospedar ele no Vercel.
-
-## Como parear o WhatsApp pela primeira vez
-
-1. Suba o sistema (`npm start` ou o modo desenvolvimento) e faça login com um usuário **Gestor**.
-2. Vá em **Administração → WhatsApp**.
-3. Um QR Code aparece na tela em poucos segundos. No celular: WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho, e escaneie o código.
-4. Assim que escanear, a tela muda pra "Conectado" e mostra o número pareado. A partir daí, mensagens novas já aparecem na Caixa de entrada (`/conversas`).
-
-A sessão fica salva em `backend/whatsapp-session/` (uma pasta local, fora do controle de versão — nunca comite esse conteúdo, ele equivale a estar logado no WhatsApp daquele número). Reiniciar o servidor não pede novo QR Code: ele reconecta sozinho usando essa sessão salva. Só é preciso escanear de novo se a sessão for encerrada — pelo botão "Desconectar" na própria tela, ou se o celular desvincular o aparelho do lado do WhatsApp. Se isso acontecer, a tela de administração mostra claramente "Sessão encerrada — é preciso parear de novo", nunca falha em silêncio.
-
-**Sobre qual número conectar**: o Baileys simula uma sessão de WhatsApp Web — não é a API oficial da Meta. Ele funciona com o número pessoal, mas todo contato daquele número (familiar, pessoal, etc.) passa a poder gerar mensagens que aparecem na caixa de entrada do CRM. Nada disso vira lead sozinho (é preciso um humano clicar em "Criar lead" e escolher a frente), mas se isso for indesejado, considere um número dedicado só ao negócio.
+Mídia (fotos, áudios, documentos) fica num bucket privado do Supabase Storage (`whatsapp-media`), com o nome do arquivo igual ao id da `Message` dona dele — mesma convenção usada antes com disco local.
 
 ## Logins de teste
 
@@ -113,13 +109,23 @@ Os e-mails são placeholders, ainda não correspondem a caixas de e-mail reais. 
 | Atendente / Vendedor | Vê todos os leads dos dois funis e todas as conversas da caixa de entrada. Só edita, move ou apaga leads sem responsável ou que já são dele — mesma regra vale pra criar lead a partir de uma conversa e pra responder mensagens. Pode se autoatribuir um lead, mas não pode reatribuir um lead de outra pessoa |
 | Financeiro | Vê tudo nos dois funis, inclusive valores. Acesso somente leitura: não cria, edita, move nem apaga lead. **Sem acesso à caixa de entrada do WhatsApp** — não conversa com contatos, só vê o histórico de mensagens já dentro do card de um lead |
 
-Essas regras são aplicadas no backend (não só escondidas na interface), então uma tentativa de burlar pela API também é bloqueada.
+Essas regras são aplicadas via Row Level Security no Postgres (não só escondidas na interface), então uma tentativa de burlar direto pela API do Supabase também é bloqueada.
 
-## O que já funciona nesta fase
+## Como parear o WhatsApp
+
+1. Faça login com um usuário **Gestor**.
+2. Vá em **Administração → WhatsApp**.
+3. Se a instância da UAZAPI ainda não estiver conectada, um QR Code aparece na tela. No celular: WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho, e escaneie o código.
+4. Assim que escanear, a tela muda pra "Conectado" e mostra o número pareado.
+
+A sessão do WhatsApp fica salva do lado da UAZAPI, não neste repositório nem em nenhuma máquina específica — reiniciar o frontend ou fazer um novo deploy não derruba a conexão.
+
+**Sobre qual número conectar**: assim como no Baileys, é uma sessão de WhatsApp Web (não a API oficial da Meta) — funciona com o número pessoal, mas todo contato daquele número passa a poder gerar mensagens que aparecem na caixa de entrada do CRM. Nada disso vira lead sozinho, mas se isso for indesejado, considere um número dedicado só ao negócio.
+
+## O que já funciona
 
 Tudo da Fase 1, mais:
 
-- Conexão com WhatsApp real via Baileys, com sessão persistente (sobrevive a reinício do servidor) e tela de status/pareamento exclusiva do Gestor.
 - Caixa de entrada (`/conversas`): lista de conversas por contato, ordenada pela mais recente, com marcação de não lida.
 - Responder uma conversa pelo CRM envia a mensagem de verdade no WhatsApp.
 - "Criar lead" a partir de uma conversa: escolhe a frente (Show contratado ou Evento próprio), o lead nasce na primeira etapa daquele funil e fica ligado à conversa dali em diante.
@@ -134,12 +140,11 @@ Tudo da Fase 1, mais:
 ## Decisões técnicas relevantes
 
 - **Origem do lead**: é um dos quatro valores fixos (indicação, redes sociais, recorrência, tráfego pago) ou "Outro" com texto livre, conforme pedido no escopo. Lead criado a partir de uma conversa do WhatsApp nasce com origem "Outro / Caixa de entrada do WhatsApp" por padrão — o vendedor ajusta depois se souber a origem real.
-- **Contato x Lead**: telefone mora no `Contact`, não solto no `Lead` (migrado nesta fase). Cada `Contact` tem um `currentLeadId` apontando pro lead "atual" daquela conversa — é ele que recebe as mensagens novas enquanto ninguém criar um lead novo pra esse contato.
+- **Contato x Lead**: telefone mora no `Contact`, não solto no `Lead`. Cada `Contact` tem um `currentLeadId` apontando pro lead "atual" daquela conversa — é ele que recebe as mensagens novas enquanto ninguém criar um lead novo pra esse contato.
 - **Mensagem sem lead**: mensagem nova de um contato sem lead vinculado fica só no `Contact` (`leadId` nulo) até alguém decidir criar o lead. Esse desenho já é o que a Fase 3 (agente de IA) vai usar pra fazer a triagem automática.
-- **Armazenamento de mídia**: fotos, áudios e documentos ficam salvos em disco local (`backend/media-storage/`, fora do controle de versão, igual `whatsapp-session/`) — nome do arquivo é o id da `Message` dona dele. Servido só por trás de autenticação (`GET /api/media/:messageId`), nunca como arquivo estático público.
-- **Áudio gravado no navegador**: o MediaRecorder do navegador grava em WebM/Opus, mas o WhatsApp só trata como mensagem de voz de verdade se o arquivo for OGG (mesmo codec Opus, contêiner diferente) — mandar WebM direto faz o envio "funcionar" (o Baileys confirma um id de mensagem) mas o áudio não toca do outro lado. O backend transcodifica pra OGG com `ffmpeg-static` antes de enviar como mensagem de voz.
+- **Áudio de voz (PTT)**: a UAZAPI aceita o WebM/Opus gerado direto pelo `MediaRecorder` do navegador como mensagem de voz, sem precisar converter pra OGG — diferente do Baileys, que exigia transcodificação.
+- **Escrita atômica de mensagem do WhatsApp**: tanto o envio quanto o recebimento passam pela função `record_whatsapp_message` (RPC `SECURITY DEFINER`), que acha-ou-cria o `Contact`, faz dedupe por `whatsappMessageId` e insere a `Message` numa única transação — evita duplicar mensagem quando o eco do próprio envio chega de volta.
 - **Lista de convidados da edição**: hoje é composta pelos leads vinculados àquela edição (nome e telefone). Se no futuro um lead único puder representar várias pessoas na porta (por exemplo, compra de dois ingressos), vale revisar esse modelo para guardar uma lista de nomes por lead.
-- **Enums no Postgres**: papel, frente de negócio, origem, tipo de histórico e direção de mensagem são campos `String` validados na camada de aplicação (zod), não `enum` nativo do Postgres — mantém a mesma convenção usada desde a Fase 1, fácil de promover a enum de verdade depois se fizer falta.
 - **Usuário nunca é apagado, só desativado**: preserva a integridade do histórico de mudanças (que guarda quem alterou o quê).
 
 ## Arquitetura pensada para as próximas fases
@@ -151,17 +156,9 @@ Não foi construído agora, mas o modelo de dados não trava:
 
 ## Comandos úteis
 
-Na raiz do projeto:
-
 ```bash
-npm run setup    # instala tudo, roda migração e seed (primeira vez)
-npm run build     # compila frontend e backend
-npm start          # builda e sobe tudo em http://localhost:3333
-```
-
-Dentro de `backend/`:
-
-```bash
-npm run prisma:studio    # abre uma interface visual do banco
-npm run prisma:migrate   # cria uma nova migração após mudar o schema
+npm install       # instala as dependências
+npm run dev        # sobe o app em modo desenvolvimento (http://localhost:5173)
+npm run build      # gera o build de produção em dist/
+npm run preview    # serve o build localmente
 ```
