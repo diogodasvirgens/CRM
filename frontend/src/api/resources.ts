@@ -1,4 +1,3 @@
-import { api } from "./client";
 import { supabase } from "./supabaseClient";
 import { BusinessLine, Contact, Conversation, EventEdition, Lead, Message, Stage, Tag, User, WhatsappState } from "../types";
 
@@ -275,10 +274,44 @@ export async function resetUserPassword(id: string) {
   return invokeAdminUsers<{ provisionalPassword: string }>({ action: "resetPassword", userId: id });
 }
 
-// WhatsApp connection (Gestor) — depende do Baileys, continua no backend Express
-export const fetchWhatsappStatus = () => api.get<WhatsappState>("/whatsapp/status").then((r) => r.data);
+// WhatsApp connection (Gestor) — via UAZAPI, proxiada pela Edge Function whatsapp-connection
+async function invokeWhatsappConnection<T>(action: "status" | "connect" | "disconnect"): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("whatsapp-connection", { body: { action } });
+  if (error) {
+    const message = (error as any)?.context?.error ?? error.message;
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data as T;
+}
 
-export const logoutWhatsapp = () => api.post("/whatsapp/logout");
+function serializeWhatsappState(data: any): WhatsappState {
+  const instance = data.instance ?? {};
+  const status: WhatsappState["status"] =
+    instance.status === "connected"
+      ? "connected"
+      : instance.qrcode
+      ? "qr"
+      : instance.status === "connecting"
+      ? "connecting"
+      : instance.status === "disconnected" || instance.status === "hibernated"
+      ? "logged_out"
+      : "disconnected";
+
+  return {
+    status,
+    qr: instance.qrcode || null,
+    phone: instance.owner || null,
+    lastError: instance.lastDisconnectReason || null,
+    updatedAt: instance.updated || new Date().toISOString(),
+  };
+}
+
+export const fetchWhatsappStatus = async () => serializeWhatsappState(await invokeWhatsappConnection("status"));
+
+export const connectWhatsapp = async () => serializeWhatsappState(await invokeWhatsappConnection("connect"));
+
+export const logoutWhatsapp = () => invokeWhatsappConnection("disconnect");
 
 // Caixa de entrada
 const conversationSelect = `
@@ -361,8 +394,18 @@ export async function fetchConversationMessages(contactId: string) {
   return { contact: contact as Contact, messages: messages as Message[] };
 }
 
+async function invokeWhatsappSend(body: Record<string, unknown>): Promise<Message> {
+  const { data, error } = await supabase.functions.invoke("whatsapp-send", { body });
+  if (error) {
+    const message = (error as any)?.context?.error ?? error.message;
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data.message as Message;
+}
+
 export const sendConversationMessage = (contactId: string, text: string) =>
-  api.post<{ message: Message }>(`/conversations/${contactId}/messages`, { text }).then((r) => r.data.message);
+  invokeWhatsappSend({ contactId, text });
 
 export const deleteConversationMessage = async (_contactId: string, messageId: string) => {
   const { error } = await supabase.from("Message").delete().eq("id", messageId);
@@ -394,25 +437,44 @@ export async function createLeadFromConversation(contactId: string, businessLine
   return assert(data, error) as Lead;
 }
 
-export const sendConversationMedia = (
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(",")[1] ?? "");
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function mediaTypeFromMime(mimeType: string): "image" | "video" | "audio" | "document" {
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("video/")) return "video";
+  if (mimeType.startsWith("audio/")) return "audio";
+  return "document";
+}
+
+export const sendConversationMedia = async (
   contactId: string,
   file: File | Blob,
   options: { fileName?: string; caption?: string; ptt?: boolean } = {}
 ) => {
-  const formData = new FormData();
-  formData.append("file", file, options.fileName ?? (file instanceof File ? file.name : "arquivo"));
-  if (options.caption) formData.append("caption", options.caption);
-  if (options.ptt) formData.append("ptt", "true");
-  return api
-    .post<{ message: Message }>(`/conversations/${contactId}/media`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    })
-    .then((r) => r.data.message);
+  const mimeType = file.type || "application/octet-stream";
+  const mediaBase64 = await blobToBase64(file);
+  return invokeWhatsappSend({
+    contactId,
+    mediaBase64,
+    mediaType: mediaTypeFromMime(mimeType),
+    mimeType,
+    fileName: options.fileName ?? (file instanceof File ? file.name : "arquivo"),
+    caption: options.caption,
+    ptt: options.ptt,
+  });
 };
 
 export async function downloadMessageMedia(messageId: string, fileName: string) {
-  const response = await api.get(`/media/${messageId}`, { responseType: "blob" });
-  const url = URL.createObjectURL(response.data as Blob);
+  const { data, error } = await supabase.storage.from("whatsapp-media").download(messageId);
+  if (error || !data) throw new Error(error?.message ?? "Não foi possível baixar o arquivo.");
+  const url = URL.createObjectURL(data);
   const link = document.createElement("a");
   link.href = url;
   link.download = fileName;

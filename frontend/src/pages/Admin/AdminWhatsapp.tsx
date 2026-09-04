@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchWhatsappStatus, logoutWhatsapp } from "../../api/resources";
+import { connectWhatsapp, fetchWhatsappStatus, logoutWhatsapp } from "../../api/resources";
 import { apiErrorMessage } from "../../api/client";
 import { useToastStore } from "../../state/toast";
 import { WhatsappConnectionStatus } from "../../types";
@@ -8,7 +8,7 @@ const STATUS_LABELS: Record<WhatsappConnectionStatus, string> = {
   connected: "Conectado",
   connecting: "Conectando...",
   qr: "Aguardando leitura do QR Code",
-  disconnected: "Desconectado — tentando reconectar automaticamente",
+  disconnected: "Desconectado",
   logged_out: "Sessão encerrada — é preciso parear de novo",
 };
 
@@ -36,6 +36,15 @@ export function AdminWhatsapp() {
     if (!confirm("Desconectar o WhatsApp? Você vai precisar escanear o QR Code de novo para reconectar.")) return;
     try {
       await logoutWhatsapp();
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-status"] });
+    } catch (err) {
+      toast.show(apiErrorMessage(err), "error");
+    }
+  }
+
+  async function handleConnect() {
+    try {
+      await connectWhatsapp();
       queryClient.invalidateQueries({ queryKey: ["whatsapp-status"] });
     } catch (err) {
       toast.show(apiErrorMessage(err), "error");
@@ -78,6 +87,12 @@ export function AdminWhatsapp() {
           {state.status === "connected" && (
             <button className="btn btn-danger btn-small" onClick={handleLogout} style={{ marginTop: 12 }}>
               Desconectar
+            </button>
+          )}
+
+          {(state.status === "disconnected" || state.status === "logged_out") && (
+            <button className="btn btn-primary btn-small" onClick={handleConnect} style={{ marginTop: 12 }}>
+              Conectar / Gerar QR Code
             </button>
           )}
         </div>

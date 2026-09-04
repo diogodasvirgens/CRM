@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { supabase } from "../api/supabaseClient";
 
-// Mídia é servida atrás de autenticação (o mesmo JWT do resto da API), então
-// uma tag <img>/<audio src="..."> comum não funciona — o navegador não anexa
-// o header Authorization num carregamento de recurso. Em vez disso buscamos
-// o arquivo via axios (que já anexa o token) e criamos uma URL local a
-// partir do blob.
+// Mídia fica num bucket privado do Supabase Storage (RLS restringe leitura a
+// quem tem acesso à caixa de entrada), então baixamos o blob autenticado e
+// criamos uma URL local a partir dele.
 export function useAuthedMediaUrl(messageId: string | null): string | null {
   const [url, setUrl] = useState<string | null>(null);
 
@@ -18,11 +16,12 @@ export function useAuthedMediaUrl(messageId: string | null): string | null {
     let objectUrl: string | null = null;
     let cancelled = false;
 
-    api
-      .get(`/media/${messageId}`, { responseType: "blob" })
-      .then((res) => {
-        if (cancelled) return;
-        objectUrl = URL.createObjectURL(res.data as Blob);
+    supabase.storage
+      .from("whatsapp-media")
+      .download(messageId)
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        objectUrl = URL.createObjectURL(data);
         setUrl(objectUrl);
       })
       .catch(() => {
