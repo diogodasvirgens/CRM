@@ -14,13 +14,9 @@ import { apiErrorMessage } from "../api/client";
 import { useToastStore } from "../state/toast";
 import { useAuthStore } from "../state/auth";
 import { BusinessLine } from "../types";
-import { formatDateOnly } from "../utils/date";
+import { formatDateTime, formatTime } from "../utils/date";
 import { useDebouncedValue } from "../utils/useDebouncedValue";
 import { MessageMedia, messageHasVisibleCaption } from "../components/MessageMedia";
-
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
 
 const FUNNEL_LABELS: Record<BusinessLine, string> = { SHOW: "Shows contratados", EVENTO: "Eventos próprios" };
 
@@ -326,7 +322,7 @@ export function Inbox() {
                   {messageHasVisibleCaption(m) && <div>{m.content}</div>}
                   <div className="message-meta">
                     {m.direction === "OUT" && m.sender ? `${m.sender.name} · ` : ""}
-                    {formatDateOnly(m.createdAt)} {formatTime(m.createdAt)}
+                    {formatDateTime(m.createdAt)}
                   </div>
                 </div>
               ))}

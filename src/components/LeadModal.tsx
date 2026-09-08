@@ -15,7 +15,7 @@ import { apiErrorMessage } from "../api/client";
 import { useAuthStore } from "../state/auth";
 import { useToastStore } from "../state/toast";
 import { BusinessLine, LeadOrigin, ORIGIN_LABELS, Stage } from "../types";
-import { formatDateOnly } from "../utils/date";
+import { formatDateTime } from "../utils/date";
 import { MessageMedia, messageHasVisibleCaption } from "./MessageMedia";
 
 interface LeadModalProps {
@@ -433,7 +433,7 @@ export function LeadModal({ businessLine, stages, leadId, defaultStageId, onClos
                       {messageHasVisibleCaption(m) && <div>{m.content}</div>}
                       <div className="message-meta">
                         {m.direction === "OUT" && m.sender ? `${m.sender.name} · ` : ""}
-                        {formatDateOnly(m.createdAt)} {new Date(m.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                        {formatDateTime(m.createdAt)}
                       </div>
                     </div>
                   ))}
@@ -448,7 +448,7 @@ export function LeadModal({ businessLine, stages, leadId, defaultStageId, onClos
                   <div key={h.id} className="history-item">
                     <b>{h.changedBy.name}</b> mudou {h.field === "STAGE" ? "a etapa" : "o responsável"} de{" "}
                     <b>{h.oldValue ?? "nada"}</b> para <b>{h.newValue ?? "nada"}</b> em{" "}
-                    {new Date(h.createdAt).toLocaleString("pt-BR")}
+                    {formatDateTime(h.createdAt)}
                   </div>
                 ))}
               </div>
