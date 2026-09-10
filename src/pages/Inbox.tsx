@@ -18,7 +18,7 @@ import { formatDateTime, formatTime } from "../utils/date";
 import { useDebouncedValue } from "../utils/useDebouncedValue";
 import { MessageMedia, messageHasVisibleCaption } from "../components/MessageMedia";
 
-const FUNNEL_LABELS: Record<BusinessLine, string> = { SHOW: "Shows contratados", EVENTO: "Eventos próprios" };
+const FUNNEL_LABELS: Record<BusinessLine, string> = { SHOW: "Shows contratados", EVENTO: "Ingressos" };
 
 export function Inbox() {
   const { user } = useAuthStore();
@@ -274,7 +274,7 @@ export function Inbox() {
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {selected.currentLead ? (
                   <span className="tag-pill">
-                    Lead em {selected.currentLead.businessLine === "SHOW" ? "Shows contratados" : "Eventos próprios"} ·{" "}
+                    Lead em {selected.currentLead.businessLine === "SHOW" ? "Shows contratados" : "Ingressos"} ·{" "}
                     {selected.currentLead.stage.name}
                   </span>
                 ) : (
@@ -292,7 +292,7 @@ export function Inbox() {
                         disabled={createLeadMutation.isPending}
                         onClick={() => createLeadMutation.mutate({ contactId: selected.id, businessLine: "EVENTO" })}
                       >
-                        Criar lead (Evento)
+                        Criar lead (Ingresso)
                       </button>
                     </div>
                   )

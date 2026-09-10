@@ -114,7 +114,7 @@ export function AdminStages() {
     <div>
       <h2>Etapas dos funis</h2>
       <StageFunnel businessLine="SHOW" title="Shows contratados" stages={showStages} />
-      <StageFunnel businessLine="EVENTO" title="Eventos próprios" stages={eventoStages} />
+      <StageFunnel businessLine="EVENTO" title="Ingressos" stages={eventoStages} />
     </div>
   );
 }

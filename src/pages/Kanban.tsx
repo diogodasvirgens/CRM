@@ -91,7 +91,7 @@ export function Kanban() {
             Shows contratados
           </button>
           <button className={businessLine === "EVENTO" ? "active" : ""} onClick={() => setBusinessLine("EVENTO")}>
-            Eventos próprios
+            Ingressos
           </button>
         </div>
         <input
