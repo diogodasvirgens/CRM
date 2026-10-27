@@ -20,6 +20,16 @@
   touch-action: manipulation;
 }
 
+html {
+  /* O WebKit no iOS "infla" o tamanho do texto automaticamente em certas
+     condições de layout (é um heurística de legibilidade pra páginas não
+     responsivas) — foi isso que deixava tudo gigante antes mesmo de tocar
+     em qualquer campo, não só o zoom ao focar input. Trava o texto no
+     tamanho que o CSS pede, sem ajuste automático nenhum. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 html,
 body,
 #root {
