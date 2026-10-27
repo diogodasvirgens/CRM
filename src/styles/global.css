@@ -512,7 +512,11 @@ textarea {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 9px 10px;
-  font-size: 14px;
+  /* 16px sempre (não só no mobile): abaixo disso o Safari no iOS dá zoom
+     na página inteira ao focar o campo, mudando o viewport e "pulando" a
+     tela — vale pra qualquer largura, não só a faixa coberta pela media
+     query de celular (ex.: iPad, split view). */
+  font-size: 16px;
   font-family: inherit;
   background: var(--brand-white);
   color: var(--text);
@@ -1281,15 +1285,5 @@ th {
     right: calc(16px + env(safe-area-inset-right));
     bottom: calc(16px + env(safe-area-inset-bottom));
     width: auto;
-  }
-
-  /* O Safari no iOS dá zoom automático na página ao focar um campo com
-     letra menor que 16px (é o jeito dele de "ajudar" a não ficar
-     ilegível) — por isso o campo de escrever mensagem "crescia" ao
-     tocar nele. 16px é o limiar que desativa esse zoom. */
-  input,
-  select,
-  textarea {
-    font-size: 16px;
   }
 }
