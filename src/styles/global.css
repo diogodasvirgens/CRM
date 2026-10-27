@@ -280,6 +280,7 @@ a {
 }
 
 .lead-card {
+  position: relative;
   background: var(--surface);
   border-radius: 6px;
   padding: 12px;
@@ -292,10 +293,34 @@ a {
   border-color: var(--brand-orange);
 }
 
+.lead-card-edit-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--brand-white);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lead-card-edit-btn:hover {
+  color: var(--brand-orange);
+  border-color: var(--brand-orange);
+}
+
 .lead-card-name {
   font-weight: 700;
   font-size: 14px;
   margin-bottom: 4px;
+  padding-right: 20px;
 }
 
 .lead-card-meta {

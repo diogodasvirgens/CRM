@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   archiveConversation,
@@ -24,12 +25,31 @@ export function Inbox() {
   const { user } = useAuthStore();
   const toast = useToastStore();
   const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const contactParam = searchParams.get("contact");
   const [showArchived, setShowArchived] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(contactParam);
   const [text, setText] = useState("");
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
   const [stageFilter, setStageFilter] = useState("");
+
+  // Veio de um link direto (ex.: clicar num card do Kanban) — garante que a
+  // conversa apareça mesmo que os filtros atuais a escondessem, e limpa o
+  // parâmetro da URL depois de aplicar (não fica preso nela).
+  useEffect(() => {
+    if (!contactParam) return;
+    setSelectedId(contactParam);
+    setShowArchived(false);
+    setSearch("");
+    setStageFilter("");
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("contact");
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contactParam]);
 
   const stagesQuery = useQuery({ queryKey: ["stages"], queryFn: fetchStages });
   const sortedStages = useMemo(
@@ -193,7 +213,7 @@ export function Inbox() {
   const messages = messagesQuery.data?.messages ?? [];
 
   return (
-    <div className="inbox">
+    <div className={`inbox ${selected ? "thread-open" : ""}`}>
       <aside className="inbox-list">
         <div className="inbox-list-header">
           <div className="funnel-tabs">

@@ -7,6 +7,7 @@ interface LeadCardProps {
   index: number;
   canDrag: boolean;
   onClick: () => void;
+  onEditClick: () => void;
 }
 
 function formatCurrency(value: number | null) {
@@ -14,7 +15,7 @@ function formatCurrency(value: number | null) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-export function LeadCard({ lead, index, canDrag, onClick }: LeadCardProps) {
+export function LeadCard({ lead, index, canDrag, onClick, onEditClick }: LeadCardProps) {
   return (
     <Draggable draggableId={lead.id} index={index} isDragDisabled={!canDrag}>
       {(provided, snapshot) => (
@@ -26,6 +27,17 @@ export function LeadCard({ lead, index, canDrag, onClick }: LeadCardProps) {
           style={{ ...provided.draggableProps.style, opacity: snapshot.isDragging ? 0.85 : 1 }}
           onClick={onClick}
         >
+          <button
+            type="button"
+            className="lead-card-edit-btn"
+            title="Editar lead"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEditClick();
+            }}
+          >
+            ✎
+          </button>
           <div className="lead-card-name">{lead.contactName}</div>
           <div className="lead-card-meta">{lead.contact.phone}</div>
           {lead.estimatedValue !== null && (

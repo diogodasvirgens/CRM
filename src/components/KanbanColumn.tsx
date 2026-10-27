@@ -6,10 +6,11 @@ interface KanbanColumnProps {
   stage: Stage;
   leads: Lead[];
   canDragLead: (lead: Lead) => boolean;
-  onCardClick: (leadId: string) => void;
+  onCardClick: (lead: Lead) => void;
+  onEditClick: (leadId: string) => void;
 }
 
-export function KanbanColumn({ stage, leads, canDragLead, onCardClick }: KanbanColumnProps) {
+export function KanbanColumn({ stage, leads, canDragLead, onCardClick, onEditClick }: KanbanColumnProps) {
   return (
     <div className="column">
       <div className="column-header">
@@ -29,7 +30,8 @@ export function KanbanColumn({ stage, leads, canDragLead, onCardClick }: KanbanC
                 lead={lead}
                 index={index}
                 canDrag={canDragLead(lead)}
-                onClick={() => onCardClick(lead.id)}
+                onClick={() => onCardClick(lead)}
+                onEditClick={() => onEditClick(lead.id)}
               />
             ))}
             {provided.placeholder}

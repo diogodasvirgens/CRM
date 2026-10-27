@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { DragDropContext, DropResult } from "@hello-pangea/dnd";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchLeads, fetchStages, updateLead } from "../api/resources";
@@ -14,6 +15,7 @@ export function Kanban() {
   const { user } = useAuthStore();
   const toast = useToastStore();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [businessLine, setBusinessLine] = useState<BusinessLine>("SHOW");
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search);
@@ -72,6 +74,16 @@ export function Kanban() {
     }
   }
 
+  function handleCardClick(lead: Lead) {
+    // Financeiro não tem acesso à caixa de entrada — mantém o comportamento
+    // antigo (abrir os detalhes do lead) só pra esse papel.
+    if (user?.role === "FINANCEIRO") {
+      setModalState({ open: true, leadId: lead.id });
+      return;
+    }
+    navigate(`/conversas?contact=${lead.contact.id}`);
+  }
+
   function closeModal() {
     setModalState({ open: false, leadId: null });
   }
@@ -121,7 +133,8 @@ export function Kanban() {
                 stage={stage}
                 leads={leadsByStage[stage.id] ?? []}
                 canDragLead={canDragLead}
-                onCardClick={(leadId) => setModalState({ open: true, leadId })}
+                onCardClick={handleCardClick}
+                onEditClick={(leadId) => setModalState({ open: true, leadId })}
               />
             ))}
           </div>
