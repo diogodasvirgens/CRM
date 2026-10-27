@@ -287,9 +287,19 @@ export function Inbox() {
         ) : (
           <>
             <div className="inbox-thread-header">
-              <div>
-                <div className="conversation-name">{selected.name || selected.phone}</div>
-                <div className="hint-text">{selected.phone}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button
+                  type="button"
+                  className="inbox-back-btn"
+                  onClick={() => setSelectedId(null)}
+                  aria-label="Voltar pra lista de conversas"
+                >
+                  ←
+                </button>
+                <div>
+                  <div className="conversation-name">{selected.name || selected.phone}</div>
+                  <div className="hint-text">{selected.phone}</div>
+                </div>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {selected.currentLead ? (
