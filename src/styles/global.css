@@ -1017,6 +1017,15 @@ th {
 
 .inbox-reply input {
   flex: 1;
+  /* Sem isso o campo não encolhe abaixo da largura mínima padrão do
+     navegador pra <input> (~170-200px) — em telas estreitas isso sozinho
+     já passa da largura disponível e empurra o botão "Enviar" pra fora
+     da tela, cortado. */
+  min-width: 0;
+}
+
+.inbox-reply > button {
+  flex-shrink: 0;
 }
 
 .recording-indicator {
@@ -1235,6 +1244,11 @@ th {
 
   .inbox-reply {
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    gap: 6px;
+  }
+
+  .inbox-reply .btn-primary {
+    padding: 9px 12px;
   }
 
   /* Admin: a barra lateral fixa vira uma faixa de abas horizontais no topo */
