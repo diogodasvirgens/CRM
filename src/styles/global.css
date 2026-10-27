@@ -1141,20 +1141,28 @@ th {
     max-width: none;
   }
 
-  /* Kanban: colunas viram "páginas" com rolagem horizontal, uma por vez */
+  /* Kanban: colunas viram "páginas" com rolagem horizontal, uma por vez.
+     O quadro rola só no eixo X (entre colunas) e cada coluna rola só no
+     eixo Y (dentro dela, via .column-body) — as duas coisas rolando juntas
+     no mesmo container é o que dava a sensação "solta" de antes. */
   .board {
     grid-template-columns: unset;
     grid-auto-flow: column;
-    grid-auto-columns: 86vw;
+    grid-auto-columns: 88vw;
+    grid-auto-rows: 100%;
     overflow-x: auto;
+    overflow-y: hidden;
     scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
     padding: 8px 14px 16px;
     -webkit-overflow-scrolling: touch;
   }
 
   .column {
+    height: 100%;
     max-height: none;
     scroll-snap-align: start;
+    scroll-snap-stop: always;
   }
 
   /* Caixa de entrada: lista e conversa não cabem lado a lado — mostra uma
