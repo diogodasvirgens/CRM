@@ -1282,4 +1282,14 @@ th {
     bottom: calc(16px + env(safe-area-inset-bottom));
     width: auto;
   }
+
+  /* O Safari no iOS dá zoom automático na página ao focar um campo com
+     letra menor que 16px (é o jeito dele de "ajudar" a não ficar
+     ilegível) — por isso o campo de escrever mensagem "crescia" ao
+     tocar nele. 16px é o limiar que desativa esse zoom. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
