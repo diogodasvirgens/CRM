@@ -907,6 +907,7 @@ th {
 .inbox-messages {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -920,6 +921,11 @@ th {
   border-radius: 10px;
   font-size: 14px;
   line-height: 1.4;
+  /* Link/texto comprido sem espaço (ex.: URL de pagamento) não quebra
+     sozinho — sem isso ele estica a bolha pra fora da largura disponível
+     e cria rolagem horizontal mesmo com max-width definido. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .message-bubble.in {
