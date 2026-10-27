@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createLead,
   createTag,
-  deleteConversationMessage,
   deleteLead,
   fetchEventEditions,
   fetchLead,
@@ -16,7 +15,6 @@ import { useAuthStore } from "../state/auth";
 import { useToastStore } from "../state/toast";
 import { BusinessLine, LeadOrigin, ORIGIN_LABELS, Stage } from "../types";
 import { formatDateTime } from "../utils/date";
-import { MessageMedia, messageHasVisibleCaption } from "./MessageMedia";
 
 interface LeadModalProps {
   businessLine: BusinessLine;
@@ -171,17 +169,6 @@ export function LeadModal({ businessLine, stages, leadId, defaultStageId, onClos
     try {
       await deleteLead(leadId);
       onSaved();
-    } catch (err) {
-      toast.show(apiErrorMessage(err), "error");
-    }
-  }
-
-  async function handleDeleteMessage(messageId: string) {
-    if (!lead) return;
-    if (!confirm("Apagar esta mensagem do CRM? Ela continua existindo no WhatsApp normalmente.")) return;
-    try {
-      await deleteConversationMessage(lead.contact.id, messageId);
-      queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
     } catch (err) {
       toast.show(apiErrorMessage(err), "error");
     }
@@ -412,34 +399,6 @@ export function LeadModal({ businessLine, stages, leadId, defaultStageId, onClos
                 Fechar
               </button>
             </div>
-
-            {isEditing && lead?.contact.messages && lead.contact.messages.length > 0 && (
-              <div className="form-field">
-                <label>Conversa no WhatsApp</label>
-                <div className="inbox-messages" style={{ maxHeight: 260, border: "1px solid var(--border)", borderRadius: 6 }}>
-                  {lead.contact.messages.map((m) => (
-                    <div key={m.id} className={`message-bubble ${m.direction === "OUT" ? "out" : "in"}`}>
-                      {canEdit && (
-                        <button
-                          type="button"
-                          className="message-delete-btn"
-                          title="Apagar mensagem"
-                          onClick={() => handleDeleteMessage(m.id)}
-                        >
-                          ×
-                        </button>
-                      )}
-                      <MessageMedia message={m} />
-                      {messageHasVisibleCaption(m) && <div>{m.content}</div>}
-                      <div className="message-meta">
-                        {m.direction === "OUT" && m.sender ? `${m.sender.name} · ` : ""}
-                        {formatDateTime(m.createdAt)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {isEditing && lead?.history && lead.history.length > 0 && (
               <div className="history-list">
