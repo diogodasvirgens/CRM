@@ -37,6 +37,12 @@ export interface Tag {
   name: string;
 }
 
+export interface QuickReply {
+  id: string;
+  title: string;
+  content: string;
+}
+
 export interface EventEdition {
   id: string;
   name: string;

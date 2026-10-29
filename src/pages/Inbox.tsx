@@ -18,6 +18,7 @@ import { BusinessLine } from "../types";
 import { formatDateTime, formatTime } from "../utils/date";
 import { useDebouncedValue } from "../utils/useDebouncedValue";
 import { MessageMedia, messageHasVisibleCaption } from "../components/MessageMedia";
+import { QuickReplyPanel } from "../components/QuickReplyPanel";
 
 const FUNNEL_LABELS: Record<BusinessLine, string> = { SHOW: "Shows contratados", EVENTO: "Ingressos" };
 
@@ -102,6 +103,14 @@ export function Inbox() {
     },
     onError: (err) => toast.show(apiErrorMessage(err), "error"),
   });
+
+  const [quickReplyOpen, setQuickReplyOpen] = useState(false);
+
+  function handleSendQuickReply(content: string) {
+    if (!selectedId) return;
+    sendMutation.mutate({ contactId: selectedId, text: content });
+    setQuickReplyOpen(false);
+  }
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -360,7 +369,19 @@ export function Inbox() {
             </div>
 
             <form className="inbox-reply" onSubmit={handleSend}>
+              {quickReplyOpen && (
+                <QuickReplyPanel onSend={handleSendQuickReply} onClose={() => setQuickReplyOpen(false)} />
+              )}
               <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileSelected} />
+              <button
+                type="button"
+                className="btn btn-secondary btn-small"
+                title="Mensagens rápidas"
+                onClick={() => setQuickReplyOpen((v) => !v)}
+                disabled={isRecording}
+              >
+                ⚡
+              </button>
               <button
                 type="button"
                 className="btn btn-secondary btn-small"

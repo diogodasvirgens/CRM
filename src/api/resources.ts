@@ -1,5 +1,17 @@
 import { supabase } from "./supabaseClient";
-import { BusinessLine, Contact, Conversation, EventEdition, Lead, Message, Stage, Tag, User, WhatsappState } from "../types";
+import {
+  BusinessLine,
+  Contact,
+  Conversation,
+  EventEdition,
+  Lead,
+  Message,
+  QuickReply,
+  Stage,
+  Tag,
+  User,
+  WhatsappState,
+} from "../types";
 
 function assert<T>(data: T | null, error: { message: string } | null): T {
   if (error) throw new Error(error.message);
@@ -167,6 +179,28 @@ export async function createTag(name: string) {
 
 export async function deleteTag(id: string) {
   const { error } = await supabase.from("Tag").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+// Mensagens rápidas (saudação, encerramento etc.) — compartilhadas entre
+// todo mundo com acesso à caixa de entrada, igual as etiquetas.
+export async function fetchQuickReplies() {
+  const { data, error } = await supabase.from("QuickReply").select("*").order("title");
+  return assert(data, error) as QuickReply[];
+}
+
+export async function createQuickReply(title: string, content: string) {
+  const { data, error } = await supabase.from("QuickReply").insert({ title, content }).select().single();
+  return assert(data, error) as QuickReply;
+}
+
+export async function updateQuickReply(id: string, payload: { title: string; content: string }) {
+  const { data, error } = await supabase.from("QuickReply").update(payload).eq("id", id).select().single();
+  return assert(data, error) as QuickReply;
+}
+
+export async function deleteQuickReply(id: string) {
+  const { error } = await supabase.from("QuickReply").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }
 
