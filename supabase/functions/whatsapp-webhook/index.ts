@@ -9,8 +9,17 @@
 //   { EventType: "messages", chat: {...}, message: {...}, owner, token, ... }
 // — descoberto inspecionando `/webhook/errors` e um log de debug temporário
 // direto no payload cru recebido aqui. `chat` tem os dados do contato/
-// conversa (wa_chatid, wa_contactName etc.), `message` tem os dados da
-// mensagem em si (chatid, sender, text, mediaType, fromMe, messageid...).
+// conversa (wa_chatid, wa_contactName, wa_label etc.), `message` tem os
+// dados da mensagem em si (chatid, sender, text, mediaType, fromMe,
+// messageid...).
+//
+// Sincronização de etiqueta do WhatsApp -> etapa do funil: o payload de
+// "messages" já traz `chat.wa_label` (array de ids de etiqueta tipo
+// "<dono>:<n>"). A UAZAPI também tem um evento dedicado pra mudança de
+// etiqueta (assinado como "chat_labels" aqui) — como o formato exato desse
+// evento específico não foi validado ao vivo ainda, o código trata o `chat`
+// dele do mesmo jeito que o do evento de mensagem (mesma função
+// syncStageFromLabels), de forma defensiva.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -56,6 +65,47 @@ function normalizeMediaType(rawMediaType?: string, messageType?: string, mimetyp
   return null;
 }
 
+// Etiqueta do WhatsApp -> etapa do funil, por nome idêntico (sem acento/
+// maiúscula não importa). Só move se exatamente UMA etapa bater com as
+// etiquetas atuais do chat — se o chat tem etiquetas que apontam pra etapas
+// diferentes entre si, ou nenhuma bate, não faz nada (evita mover errado).
+async function syncStageFromLabels(chat: any, uazapiUrl: string, uazapiToken: string) {
+  const waLabelIds: string[] = Array.isArray(chat?.wa_label) ? chat.wa_label : [];
+  const chatJid: string = chat?.wa_chatid || "";
+  const phone = chatJid.replace(/\D/g, "");
+  if (!phone || waLabelIds.length === 0) return;
+
+  try {
+    const labelsRes = await fetch(`${uazapiUrl}/labels`, {
+      method: "GET",
+      headers: { token: uazapiToken },
+    });
+    if (!labelsRes.ok) return;
+    const allLabels: Array<{ id: string; name: string }> = await labelsRes.json();
+    const labelNameById = new Map(allLabels.map((l) => [l.id, (l.name ?? "").trim().toLowerCase()]));
+
+    const chatLabelNames = waLabelIds
+      .map((id) => labelNameById.get(id))
+      .filter((name): name is string => Boolean(name));
+    if (chatLabelNames.length === 0) return;
+
+    const { data: stages, error: stagesError } = await admin.from("Stage").select("id, name");
+    if (stagesError || !stages) return;
+
+    const matchedStageIds = new Set(
+      stages.filter((s: any) => chatLabelNames.includes((s.name ?? "").trim().toLowerCase())).map((s: any) => s.id)
+    );
+
+    if (matchedStageIds.size !== 1) return;
+    const [stageId] = matchedStageIds;
+
+    await admin.rpc("apply_whatsapp_label_stage", { p_phone: phone, p_stage_id: stageId });
+  } catch {
+    // Mensagem/evento principal já foi processado; falha aqui não deve
+    // quebrar o resto do webhook.
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -75,12 +125,29 @@ Deno.serve(async (req) => {
   };
 
   const body = await req.json().catch(() => null);
-  if (!body || body.EventType !== "messages") {
+  if (!body || typeof body.EventType !== "string") {
+    return json({ ok: true });
+  }
+
+  // Evento dedicado de mudança de etiqueta (nome do evento ainda não
+  // validado ao vivo — ver comentário no topo do arquivo).
+  if (body.EventType === "chat_labels" || body.EventType === "labels") {
+    const chat = body.chat ?? body.data?.chat ?? body.data ?? {};
+    await syncStageFromLabels(chat, uazapiUrl, uazapiToken);
+    return json({ ok: true });
+  }
+
+  if (body.EventType !== "messages") {
     return json({ ok: true });
   }
 
   const message = body.message ?? {};
   const chat = body.chat ?? {};
+
+  // Toda mensagem já carrega o estado atual das etiquetas do chat —
+  // aproveita pra manter o funil sincronizado sem depender só do evento
+  // dedicado (que pode não disparar se a etiqueta mudar sem mensagem nova).
+  await syncStageFromLabels(chat, uazapiUrl, uazapiToken);
 
   if (message.isGroup || message.wasSentByApi === true) {
     return json({ ok: true });
